@@ -89,6 +89,8 @@ class Pos extends Component
     public function mount(): void
     {
         $this->outletId = session('pos_outlet_id');
+        // Mulai dari tab ⭐ Best supaya menu yang paling sering dipesan langsung terlihat.
+        $this->category = $this->best[0] ? self::BEST : '';
     }
 
     #[Computed]
@@ -106,10 +108,27 @@ class Pos extends Component
     #[Computed]
     public function menus()
     {
-        return Menu::with('variants')->where('outlet_id', $this->outletId)->where('is_active', true)
-            ->when($this->category, fn ($q) => $q->where('category', $this->category))
+        // Pencarian selalu ke semua menu, termasuk saat tab Best aktif.
+        $best = $this->category === self::BEST && $this->search === '';
+
+        $menus = Menu::with('variants')->where('outlet_id', $this->outletId)->where('is_active', true)
+            ->when($best, fn ($q) => $q->whereIn('id', $this->best[0]))
+            ->when($this->category && $this->category !== self::BEST, fn ($q) => $q->where('category', $this->category))
             ->when($this->search, fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
             ->orderBy('category')->orderBy('name')->get();
+
+        // Urutan otomatis mengikuti peringkat penjualan.
+        return $best ? $menus->sortBy(fn ($m) => array_search($m->id, $this->best[0]))->values() : $menus;
+    }
+
+    /** Kategori khusus untuk tab ⭐ Best. */
+    public const BEST = '__best';
+
+    /** @return array{0: array<int, string>, 1: string} [menu ids, 'manual'|'auto'] */
+    #[Computed]
+    public function best(): array
+    {
+        return Menu::bestFor($this->outletId);
     }
 
     #[Computed]

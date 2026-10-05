@@ -46,6 +46,8 @@ class MenuResource extends Resource
                 Forms\Components\TextInput::make('free_toppings')->label('Topping gratis per cup')->numeric()->minValue(0)->maxValue(5)->default(0)
                     ->helperText('Mis. 1 = "harga sudah termasuk free 1 topping".'),
                 Forms\Components\Toggle::make('is_active')->label('Tersedia')->default(true),
+                Forms\Components\Toggle::make('is_best')->label('⭐ Best menu')
+                    ->helperText('Tampil di tab Best layar kasir. Bila tidak ada yang ditandai di outlet ini, tab Best otomatis berisi menu terlaris 30 hari terakhir.'),
                 Forms\Components\FileUpload::make('image')->label('Foto produk (opsional)')->image()->imageEditor()
                     ->disk('public')->directory('menus')->maxSize(2048)->columnSpanFull(),
             ]),
@@ -94,8 +96,10 @@ class MenuResource extends Resource
             Tables\Columns\TextColumn::make('recipes_count')->counts('recipes')->label('Bahan resep')
                 ->color(fn ($state) => $state ? null : 'danger'),
             Tables\Columns\ToggleColumn::make('is_active')->label('Tersedia'),
+            Tables\Columns\ToggleColumn::make('is_best')->label('⭐ Best')->sortable(),
         ])->filters([
             Tables\Filters\SelectFilter::make('outlet_id')->relationship('outlet', 'name')->label('Outlet'),
+            Tables\Filters\TernaryFilter::make('is_best')->label('Best menu'),
             Tables\Filters\SelectFilter::make('category')->options(fn () => Menu::distinct()->pluck('category', 'category')->all())->label('Kategori'),
         ])->actions([
             Tables\Actions\EditAction::make()->slideOver(),

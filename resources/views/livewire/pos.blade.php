@@ -129,11 +129,16 @@
         <main class="flex-1 grid lg:grid-cols-[minmax(0,1fr)_400px]">
             <section class="min-w-0 p-4 lg:p-6 space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div class="relative sm:w-64">
+                    <div class="relative shrink-0 sm:w-56">
                         <svg class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
                         <input type="search" wire:model.live.debounce.250ms="search" placeholder="Cari menu" class="input h-10 pl-9 text-sm" aria-label="Cari menu">
                     </div>
-                    <div class="flex gap-1 overflow-x-auto rounded-lg bg-white p-1 ring-1 ring-slate-200" role="tablist">
+                    <div class="flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-white p-1 ring-1 ring-slate-200" role="tablist">
+                        <button wire:click="$set('category', '{{ \App\Livewire\Pos::BEST }}')"
+                                class="chip gap-1.5 {{ $category === \App\Livewire\Pos::BEST ? 'chip-active' : 'chip-idle' }}">
+                            <svg class="size-4 {{ $category === \App\Livewire\Pos::BEST ? 'text-amber-300' : 'text-amber-500' }}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401Z"/></svg>
+                            Best
+                        </button>
                         <button wire:click="$set('category', '')" class="chip {{ $category === '' ? 'chip-active' : 'chip-idle' }}">Semua</button>
                         @foreach ($this->categories as $c)
                             <button wire:click="$set('category', @js($c))" class="chip {{ $category === $c ? 'chip-active' : 'chip-idle' }}">{{ $c }}</button>
@@ -156,7 +161,12 @@
                                 @endif
                             </div>
                             <div class="p-3">
-                                <span class="badge bg-slate-100 text-slate-600">{{ $m->category }}</span>
+                                <div class="flex flex-wrap gap-1">
+                                    @if (in_array($m->id, $this->best[0]))
+                                        <span class="badge bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200">★ Best</span>
+                                    @endif
+                                    <span class="badge bg-slate-100 text-slate-600">{{ $m->category }}</span>
+                                </div>
                                 <div class="mt-1.5 line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-5 text-slate-900">{{ $m->name }}</div>
                                 <div class="mt-1 flex items-baseline gap-1">
                                     @if ($m->variants->count() > 1)<span class="text-xs text-slate-500">mulai</span>@endif
@@ -166,7 +176,16 @@
                         </button>
                     @empty
                         <div class="col-span-full card grid place-items-center py-16 text-sm text-slate-500">
-                            {{ $search ? 'Menu tidak ditemukan.' : 'Belum ada menu untuk outlet ini.' }}
+                            @if ($search)
+                                Menu tidak ditemukan.
+                            @elseif ($category === \App\Livewire\Pos::BEST)
+                                <div class="text-center">
+                                    <p class="font-medium text-slate-700">Belum ada best menu</p>
+                                    <p class="mt-1 text-xs">Akan terisi otomatis dari menu terlaris, atau owner bisa menandainya di Admin › Menu & Resep.</p>
+                                </div>
+                            @else
+                                Belum ada menu untuk outlet ini.
+                            @endif
                         </div>
                     @endforelse
                 </div>

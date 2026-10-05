@@ -258,6 +258,40 @@ class PosFlowTest extends TestCase
         $this->assertSame(26000, Transaction::first()->total);
     }
 
+    public function test_best_menu_auto_from_sales_then_manual_override(): void
+    {
+        [$outlet, $kasir, $shift] = $this->setupShift();
+        $grafika = Outlet::where('name', 'Grafika')->first();
+        $pos = app(PosService::class);
+        $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
+
+        // Belum ada penjualan & belum ditandai: tab Best kosong, kasir mulai di "Semua".
+        Livewire::test(Pos::class)->assertSet('category', '');
+
+        // Otomatis: urut dari yang paling banyak terjual di outlet ini saja.
+        $pos->checkout($kasir, $shift, [$this->line($outlet, 'Jasmine Tea', [], 5)], 'qris', 'offline', 0);
+        $pos->checkout($kasir, $shift, [$this->line($outlet, 'Coklat Lava', [], 2)], 'qris', 'offline', 0);
+        [$ids, $mode] = Menu::bestFor($outlet->id);
+        $this->assertSame('auto', $mode);
+        $this->assertSame(['Jasmine Tea', 'Coklat Lava'], Menu::findMany($ids)->sortBy(fn ($m) => array_search($m->id, $ids))->pluck('name')->values()->all());
+        $this->assertSame([], Menu::bestFor($grafika->id)[0]);
+
+        Livewire::test(Pos::class)
+            ->assertSet('category', Pos::BEST)
+            ->assertSee('Jasmine Tea')->assertDontSee('Matcha Flavor')
+            ->set('search', 'Matcha')->assertSee('Matcha Flavor'); // pencarian tetap ke semua menu
+
+        // Manual: begitu owner menandai menu, daftar otomatis diganti.
+        Menu::where('outlet_id', $outlet->id)->where('name', 'Taro Flavor')->update(['is_best' => true]);
+        [$ids, $mode] = Menu::bestFor($outlet->id);
+        $this->assertSame('manual', $mode);
+        $this->assertSame(['Taro Flavor'], Menu::findMany($ids)->pluck('name')->all());
+
+        // Seeder ulang tidak menghapus pilihan owner.
+        $this->seed(MenuSeeder::class);
+        $this->assertTrue(Menu::where('outlet_id', $outlet->id)->where('name', 'Taro Flavor')->value('is_best'));
+    }
+
     public function test_admin_pages_render_for_owner(): void
     {
         $owner = User::where('role', 'owner')->first();
