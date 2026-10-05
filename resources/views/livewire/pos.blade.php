@@ -355,8 +355,7 @@
                     </ul>
                 </section>
 
-                <form wire:submit="closeShift" wire:confirm="Tutup shift sekarang? Pastikan uang di laci sudah dihitung."
-                      class="card lg:col-span-2" x-data="{ cash: @entangle('actualCash'), expected: {{ $s['expected_cash'] }} }">
+                <form wire:submit="confirmCloseShift" class="card lg:col-span-2" x-data="{ cash: @entangle('actualCash'), expected: {{ $s['expected_cash'] }} }">
                     <div class="card-header">
                         <h2 class="card-title">Tutup shift</h2>
                         <span class="ml-auto text-xs text-slate-500">Hitung semua uang tunai di laci</span>
@@ -604,6 +603,31 @@
                 </div>
                 <div class="p-6 pt-3">
                     <button wire:click="newOrder" class="btn btn-primary btn-lg w-full">Pesanan baru</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ================= MODAL: konfirmasi tutup shift ================= --}}
+    @if ($confirmingClose && $this->shift)
+        @php($exp = $this->shift->computeExpectedCash())
+        @php($diff = (int) $actualCash - $exp)
+        <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="close-title">
+            <div class="modal sm:max-w-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 id="close-title" class="text-base font-semibold">Tutup shift sekarang?</h3>
+                    <p class="mt-1 text-xs text-slate-500">Pastikan uang di laci sudah dihitung. Shift yang ditutup tidak bisa dibuka lagi.</p>
+                </div>
+                <dl class="space-y-2 px-5 py-4 text-sm">
+                    <div class="flex justify-between"><dt class="text-slate-500">Cash seharusnya</dt><dd class="font-medium tabular-nums">{{ $rp($exp) }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-slate-500">Cash fisik</dt><dd class="font-medium tabular-nums">{{ $rp((int) $actualCash) }}</dd></div>
+                    <div class="flex items-center justify-between rounded-lg px-3 py-2.5 {{ $diff === 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800' }}">
+                        <dt class="font-medium">Selisih</dt><dd class="text-base font-semibold tabular-nums">{{ $rp($diff) }}</dd>
+                    </div>
+                </dl>
+                <div class="flex gap-2 border-t border-slate-200 px-5 py-4">
+                    <button type="button" wire:click="$set('confirmingClose', false)" class="btn btn-secondary">Batal</button>
+                    <button type="button" wire:click="closeShift" wire:loading.attr="disabled" class="btn btn-danger flex-1">Ya, tutup shift</button>
                 </div>
             </div>
         </div>

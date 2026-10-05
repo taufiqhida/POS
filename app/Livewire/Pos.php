@@ -79,6 +79,8 @@ class Pos extends Component
 
     public ?int $actualCash = null;
 
+    public bool $confirmingClose = false;
+
     public string $closeNote = '';
 
     public ?string $closedShiftId = null;
@@ -174,9 +176,17 @@ class Pos extends Component
         $this->toast('Pengeluaran dicatat.');
     }
 
+    /** Langkah 1: cek isian, lalu tampilkan konfirmasi di dalam aplikasi (bukan confirm() bawaan browser). */
+    public function confirmCloseShift(): void
+    {
+        $this->validate(['actualCash' => 'required|integer|min:0'], [], ['actualCash' => 'cash fisik']);
+        $this->confirmingClose = true;
+    }
+
     public function closeShift(ShiftService $svc): void
     {
         $this->validate(['actualCash' => 'required|integer|min:0'], [], ['actualCash' => 'cash fisik']);
+        $this->confirmingClose = false;
         $shift = $svc->close($this->requireShift(), Auth::user(), $this->actualCash, $this->closeNote ?: null);
         $this->closedShiftId = $shift->id;
         $this->reset('actualCash', 'closeNote', 'cart');

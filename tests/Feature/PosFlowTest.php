@@ -224,6 +224,23 @@ class PosFlowTest extends TestCase
         $this->assertSame('closed', $closed->status);
     }
 
+    public function test_close_shift_from_screen_with_in_app_confirmation(): void
+    {
+        [$outlet, $kasir, $shift] = $this->setupShift(100000);
+        $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
+
+        Livewire::test(Pos::class)
+            ->set('tab', 'shift')
+            ->call('confirmCloseShift')->assertHasErrors('actualCash')        // kas fisik wajib diisi
+            ->set('actualCash', 95000)->call('confirmCloseShift')
+            ->assertSet('confirmingClose', true)->assertSee('Tutup shift sekarang?')->assertSee('-Rp5.000')
+            ->call('closeShift')->assertHasNoErrors()
+            ->assertSee('Ringkasan shift yang baru ditutup');
+
+        $this->assertSame('closed', $shift->fresh()->status);
+        $this->assertSame(-5000, $shift->fresh()->cash_difference);
+    }
+
     public function test_void_needs_manager_pin_and_restores_stock(): void
     {
         [$outlet, $kasir, $shift] = $this->setupShift();
