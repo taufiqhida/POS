@@ -94,8 +94,8 @@ class PosFlowTest extends TestCase
         $this->assertSame(['Boba', 'Choco Chips', 'Jelly Cendol', 'Rodeo'], Topping::where('group', 'minuman')->orderBy('name')->pluck('name')->all());
         $this->assertSame(13, Topping::where('group', 'waffle')->count());
         $this->assertSame(24000, Menu::where('name', 'Beef Kebab Besar Special')->first()->base_price);
-        $this->assertSame(8000, Menu::where('name', 'Original Croffle')->first()->base_price);
-        $this->assertSame(11000, Menu::where('name', 'Crunchy Choco Croffle')->first()->base_price);
+        $this->assertSame(5000, Menu::where('name', 'Original Croffle')->first()->base_price);
+        $this->assertSame(9000, Menu::where('name', 'Crunchy Choco Croffle')->first()->base_price);
         $this->assertSame(['Elsya', 'Mia'], User::where('outlet_id', $tembalang->id)->orderBy('name')->pluck('name')->all());
         $this->assertSame(['Eka', 'Pasya'], User::where('outlet_id', $grafika->id)->orderBy('name')->pluck('name')->all());
         $this->assertSame(15000, Menu::where('name', 'Maryam Special (Coklat, Keju, Selai, Chocochip)')->first()->base_price);

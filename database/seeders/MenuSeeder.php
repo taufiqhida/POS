@@ -245,12 +245,12 @@ class MenuSeeder extends Seeder
         // ================= CROFFLE (Dedua Croffle) — Grafika =================
         $croffleOpt = ['group' => 'croffle', 'outlets' => self::ONLY_GRAFIKA];
         $croffle = [
-            'Original Croffle' => [8000, []],
-            'Choco Croffle' => [11000, [['Olesan Cokelat', 20]]],
-            'Matcha Croffle' => [11000, [['Olesan Matcha', 20]]],
-            'Blueberry Croffle' => [11000, [['Olesan Blueberry', 20]]],
-            'Strawberry Croffle' => [11000, [['Olesan Strawberry', 20]]],
-            'Crunchy Choco Croffle' => [11000, [['Olesan Cokelat', 20], ['Kacang Cincang', 10]]],
+            'Original Croffle' => [5000, []],
+            'Choco Croffle' => [8000, [['Olesan Cokelat', 20]]],
+            'Matcha Croffle' => [8000, [['Olesan Matcha', 20]]],
+            'Blueberry Croffle' => [8000, [['Olesan Blueberry', 20]]],
+            'Strawberry Croffle' => [8000, [['Olesan Strawberry', 20]]],
+            'Crunchy Choco Croffle' => [9000, [['Olesan Cokelat', 20], ['Kacang Cincang', 10]]],
         ];
         foreach ($croffle as $n => [$price, $extra]) {
             $add($n, 'Croffle', $price, [['Adonan Croffle', 1], ['Kertas Bungkus', 1], ...$extra], $croffleOpt);
