@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] { display: none !important; }
+
+@layer base {
+    body { font-feature-settings: "cv11", "ss01"; }
+}
+
+/* Komponen dasar layar kasir — dipakai ulang supaya tampilan konsisten. */
+@layer components {
+    .card { @apply bg-white border border-slate-200 rounded-xl; }
+    .card-header { @apply flex items-center gap-3 px-5 py-4 border-b border-slate-200; }
+    .card-title { @apply text-sm font-semibold text-slate-900; }
+
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 h-11 text-sm font-semibold transition
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2
+        disabled:cursor-not-allowed disabled:opacity-50 select-none; }
+    .btn-lg { @apply h-14 px-6 text-base; }
+    .btn-sm { @apply h-9 px-3 text-xs; }
+    .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 shadow-sm; }
+    .btn-success { @apply bg-emerald-700 text-white hover:bg-emerald-800 shadow-sm; }
+    .btn-danger { @apply bg-rose-600 text-white hover:bg-rose-700 shadow-sm; }
+    .btn-secondary { @apply bg-white text-slate-700 border border-slate-300 hover:bg-slate-50; }
+    .btn-ghost { @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900; }
+    .btn-icon { @apply inline-flex items-center justify-center size-9 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50; }
+
+    .input { @apply block w-full rounded-lg border-slate-300 bg-white text-slate-900 placeholder:text-slate-400
+        focus:border-indigo-500 focus:ring-indigo-500; }
+    .label { @apply block text-xs font-medium text-slate-600 mb-1.5; }
+
+    /* Pilihan (ukuran, metode bayar, topping) */
+    .option { @apply rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-400; }
+    .option-active { @apply border-indigo-600 bg-indigo-50 text-indigo-800 ring-1 ring-indigo-600; }
+
+    .chip { @apply inline-flex items-center rounded-md px-3 h-9 text-sm font-medium whitespace-nowrap transition; }
+    .chip-idle { @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900; }
+    .chip-active { @apply bg-slate-900 text-white; }
+
+    .badge { @apply inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium; }
+
+    .modal-backdrop { @apply fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4; }
+    .modal { @apply w-full bg-white sm:rounded-xl rounded-t-xl shadow-xl max-h-[92vh] overflow-y-auto; }
+
+    .keypad-key { @apply h-14 rounded-lg border border-slate-200 bg-white text-xl font-semibold text-slate-800 hover:bg-slate-50 active:bg-slate-100; }
+}
