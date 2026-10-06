@@ -23,7 +23,12 @@ class PosFlowTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected bool $seed = true;
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Seed di dalam transaksi tes, supaya data demo tidak bocor ke kelas tes lain.
+        $this->seed();
+    }
 
     private function setupShift(int $modal = 200000): array
     {

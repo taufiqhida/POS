@@ -1,0 +1,6 @@
+# APP_DOMAIN = domain (mis. kasir.jellypotter.id) → HTTPS otomatis.
+# Belum punya domain? Isi APP_DOMAIN=:80 untuk sementara (akses lewat http://IP-VPS).
+{$APP_DOMAIN} {
+    encode gzip
+    reverse_proxy app:80
+}

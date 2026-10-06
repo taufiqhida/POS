@@ -1,0 +1,94 @@
+# Jelly Potter Smart Cashier — produksi.
+# Pakai: cp .env.production.example .env  → isi  → docker compose up -d --build
+# Panduan lengkap: DEPLOY.md
+
+x-app: &app
+  build: .
+  image: jelly-potter-kasir:latest
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - storage:/var/www/html/storage
+
+services:
+  app:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Laporan harian ke HP owner (22:00) & tugas terjadwal lain.
+  scheduler:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: scheduler
+    command: ["su-exec", "www-data", "php", "artisan", "schedule:work"]
+    depends_on:
+      - app
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      TZ: Asia/Jakarta
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Backup database harian ke folder ./backups di VPS, disimpan 14 hari.
+  backup:
+    image: mysql:8.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_PWD: ${DB_ROOT_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      TZ: Asia/Jakarta
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/jellypotter-$$(date +%Y%m%d-%H%M).sql.gz
+          if mysqldump -h db -u root --single-transaction --routines "$$DB_DATABASE" | gzip > "$$f.tmp"; then
+            mv "$$f.tmp" "$$f" && echo "Backup OK: $$f"
+          else
+            rm -f "$$f.tmp"; echo "Backup GAGAL" >&2
+          fi
+          find /backups -name 'jellypotter-*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+
+  # HTTPS otomatis (Let's Encrypt) untuk domain di APP_DOMAIN.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  storage:
+  dbdata:
+  caddy_data:
+  caddy_config:

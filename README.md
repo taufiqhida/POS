@@ -3,6 +3,10 @@
 Aplikasi kasir dan kontrol outlet untuk Jelly Potter (Tembalang & Grafika), dibangun sesuai [PRD.md](PRD.md).
 Stack: **Laravel 11 + Filament 3 (panel owner) + Livewire/Tailwind (layar kasir) + MySQL**.
 
+## Deploy ke VPS
+
+Pakai Docker — langkah lengkap di [DEPLOY.md](DEPLOY.md).
+
 ## Menjalankan (Laragon)
 
 ```bash

@@ -12,6 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias(['pos.auth' => \App\Http\Middleware\PosAuth::class]);
+        // Di VPS aplikasi berada di belakang reverse proxy (Caddy) yang menangani HTTPS.
+        $middleware->trustProxies(at: '*');
         $middleware->redirectGuestsTo(fn () => route('pos.login'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
