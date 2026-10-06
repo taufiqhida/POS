@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Jelly Potter Smart Cashier — image produksi (Nginx + PHP-FPM dalam satu container).
+# Jelly Potter Smart Cashier — image produksi (Nginx + PHP 8.4-FPM dalam satu container).
 
 # ---------- 1. Dependensi PHP ----------
 FROM composer:2 AS vendor
@@ -20,7 +20,7 @@ COPY --from=vendor /app/vendor/laravel/framework/src/Illuminate/Pagination/resou
 RUN npm run build
 
 # ---------- 3. Runtime ----------
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 RUN apk add --no-cache nginx supervisor su-exec tzdata icu-libs libzip libpng libjpeg-turbo freetype \
     && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev libzip-dev libpng-dev libjpeg-turbo-dev freetype-dev \
@@ -39,6 +39,9 @@ WORKDIR /var/www/html
 COPY --chown=www-data:www-data . .
 COPY --chown=www-data:www-data --from=vendor /app/vendor ./vendor
 COPY --chown=www-data:www-data --from=assets /app/public/build ./public/build
+
+# Gagal saat build (bukan saat jalan) bila versi PHP tidak cocok dengan composer.lock.
+RUN php -r 'require "vendor/autoload.php"; echo "Platform PHP ".PHP_VERSION." OK\n";'
 
 RUN rm -rf tests .claude node_modules storage/logs/*.log \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs \

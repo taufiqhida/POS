@@ -7,7 +7,7 @@ Isi yang berjalan:
 
 | Container | Fungsi |
 |---|---|
-| `app` | Aplikasi (Nginx + PHP 8.3), migrasi database otomatis saat start |
+| `app` | Aplikasi (Nginx + PHP 8.4), migrasi database otomatis saat start |
 | `scheduler` | Laporan harian ke HP owner jam 22:00 |
 | `db` | MySQL 8 (data di volume `dbdata`) |
 | `backup` | Backup database harian ke folder `backups/`, disimpan 14 hari |
