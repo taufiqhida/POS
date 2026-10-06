@@ -21,6 +21,12 @@ class AppServiceProvider extends ServiceProvider
     {
         \Carbon\Carbon::setLocale('id');
 
+        // Di VPS (aaPanel/Nginx → Docker) header X-Forwarded-Proto tidak selalu diteruskan.
+        // Bila APP_URL https, paksa semua URL yang dibuat aplikasi memakai https.
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
+
         // Setiap perubahan harga dari panel admin dicatat di riwayat audit.
         $log = function (string $field, callable $label) {
             return function (Model $m) use ($field, $label) {
