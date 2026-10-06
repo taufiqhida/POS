@@ -5,7 +5,7 @@
 # Isi di .env:
 #   DB_HOST=<nama container MySQL yang sudah ada>
 #   SHARED_DB_NETWORK=<network docker tempat container MySQL itu berada>
-#   APP_PORT=8081   (port lokal; web server/reverse proxy yang sudah ada meneruskan domain ke sini)
+#   APP_PORT=8084   (port lokal; web server/reverse proxy yang sudah ada meneruskan domain ke sini)
 # Panduan: DEPLOY.md bagian "Memakai MySQL yang sudah ada".
 
 x-app: &app
@@ -24,7 +24,7 @@ services:
     <<: *app
     ports:
       # Hanya bisa diakses dari VPS sendiri; domain diteruskan oleh Nginx/Caddy yang sudah ada.
-      - "127.0.0.1:${APP_PORT:-8081}:80"
+      - "127.0.0.1:${APP_PORT:-8084}:80"
 
   scheduler:
     <<: *app

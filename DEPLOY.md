@@ -158,7 +158,7 @@ DB_DATABASE=jelly_potter_kasir
 DB_USERNAME=jellypotter
 DB_PASSWORD=<hasil langkah b>
 SHARED_DB_NETWORK=<nama network dari langkah a>
-APP_PORT=8081
+APP_PORT=8084
 ```
 
 **d. Jalankan**
@@ -177,7 +177,7 @@ server {
     server_name kasir.domainanda.com;
     client_max_body_size 10M;
     location / {
-        proxy_pass http://127.0.0.1:8081;
+        proxy_pass http://127.0.0.1:8084;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
