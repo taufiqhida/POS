@@ -1,0 +1,71 @@
+# Varian: memakai server MySQL yang SUDAH ADA di VPS (mis. milik project lain), tanpa container db sendiri.
+# Jelly Potter tetap memakai DATABASE terpisah (mis. jelly_potter_kasir) di server MySQL itu.
+#
+# Pakai:  docker compose -f docker-compose.shared-db.yml up -d --build
+# Isi di .env:
+#   DB_HOST=<nama container MySQL yang sudah ada>
+#   SHARED_DB_NETWORK=<network docker tempat container MySQL itu berada>
+#   APP_PORT=8081   (port lokal; web server/reverse proxy yang sudah ada meneruskan domain ke sini)
+# Panduan: DEPLOY.md bagian "Memakai MySQL yang sudah ada".
+
+x-app: &app
+  build: .
+  image: jelly-potter-kasir:latest
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - storage:/var/www/html/storage
+  networks:
+    - default
+    - shareddb
+
+services:
+  app:
+    <<: *app
+    ports:
+      # Hanya bisa diakses dari VPS sendiri; domain diteruskan oleh Nginx/Caddy yang sudah ada.
+      - "127.0.0.1:${APP_PORT:-8081}:80"
+
+  scheduler:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: scheduler
+    command: ["su-exec", "www-data", "php", "artisan", "schedule:work"]
+    depends_on:
+      - app
+
+  # Backup harian database jelly_potter_kasir saja (bukan database project lain).
+  backup:
+    image: mysql:8.0
+    restart: unless-stopped
+    networks:
+      - shareddb
+    environment:
+      MYSQL_PWD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_DATABASE: ${DB_DATABASE}
+      TZ: Asia/Jakarta
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/backups/jellypotter-$$(date +%Y%m%d-%H%M).sql.gz
+          if mysqldump -h "$$DB_HOST" -u "$$DB_USERNAME" --single-transaction --no-tablespaces "$$DB_DATABASE" | gzip > "$$f.tmp"; then
+            mv "$$f.tmp" "$$f" && echo "Backup OK: $$f"
+          else
+            rm -f "$$f.tmp"; echo "Backup GAGAL" >&2
+          fi
+          find /backups -name 'jellypotter-*.sql.gz' -mtime +14 -delete
+          sleep 86400
+        done
+
+networks:
+  shareddb:
+    external: true
+    name: ${SHARED_DB_NETWORK}
+
+volumes:
+  storage:

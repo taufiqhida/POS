@@ -122,3 +122,74 @@ backup di VPS yang sama tidak menolong bila VPS-nya rusak.
 docker compose ps
 docker compose restart app
 ```
+
+---
+
+## Memakai MySQL yang sudah ada di VPS
+
+Kalau VPS sudah punya container MySQL milik project lain, Jelly Potter bisa menumpang di server MySQL
+itu dengan **database & user sendiri** (jangan memakai database project lain — tabel `users` dan
+`sessions` akan bentrok). Varian ini juga tidak memakai Caddy, karena port 80/443 biasanya sudah
+dipakai web server yang ada.
+
+**a. Cari nama container & network MySQL yang sudah ada**
+
+```bash
+docker ps --format '{{.Names}}\t{{.Image}}' | grep -iE 'mysql|maria'
+docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' NAMA_CONTAINER_MYSQL
+```
+
+**b. Buat database & user khusus Jelly Potter** (minta password root MySQL saat diminta)
+
+```bash
+JP_DB_PASS=$(openssl rand -hex 20); echo "DB_PASSWORD=$JP_DB_PASS"
+docker exec -it NAMA_CONTAINER_MYSQL mysql -u root -p -e "
+  CREATE DATABASE IF NOT EXISTS jelly_potter_kasir CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  CREATE USER IF NOT EXISTS 'jellypotter'@'%' IDENTIFIED BY '$JP_DB_PASS';
+  GRANT ALL PRIVILEGES ON jelly_potter_kasir.* TO 'jellypotter'@'%';
+  FLUSH PRIVILEGES;"
+```
+
+**c. Isi `.env`** (langkah 4 di atas), dengan bagian database seperti ini:
+
+```
+DB_HOST=NAMA_CONTAINER_MYSQL
+DB_DATABASE=jelly_potter_kasir
+DB_USERNAME=jellypotter
+DB_PASSWORD=<hasil langkah b>
+SHARED_DB_NETWORK=<nama network dari langkah a>
+APP_PORT=8081
+```
+
+**d. Jalankan**
+
+```bash
+docker compose -f docker-compose.shared-db.yml up -d --build
+docker compose -f docker-compose.shared-db.yml exec -u www-data app php artisan db:seed --class=ProductionSeeder --force
+docker compose -f docker-compose.shared-db.yml exec -u www-data app php artisan jp:user
+```
+
+**e. Arahkan domain ke aplikasi** — tambahkan di web server yang sudah ada. Contoh Nginx di host
+(`/etc/nginx/sites-available/jellypotter`):
+
+```nginx
+server {
+    server_name kasir.domainanda.com;
+    client_max_body_size 10M;
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+ln -s /etc/nginx/sites-available/jellypotter /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+certbot --nginx -d kasir.domainanda.com
+```
+
+Semua perintah perawatan di atas tetap berlaku, tambahkan `-f docker-compose.shared-db.yml`.
