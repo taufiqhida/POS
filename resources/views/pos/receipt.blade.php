@@ -17,9 +17,9 @@
 </head>
 <body @if($print) onload="window.print()" @endif>
 <div class="r">
-    <div class="c b" style="font-size:16px">{{ $store }}</div>
-    <div class="c s">{{ $tagline }}</div>
-    <div class="c s">{{ $trx->outlet->name }} — {{ $trx->outlet->address }}</div>
+    <div class="c b" style="font-size:16px">{{ $trx->outlet->receiptTitle() }}</div>
+    @if ($trx->outlet->address)<div class="c s">{{ $trx->outlet->address }}</div>@endif
+    @if ($trx->outlet->phone)<div class="c s">HP/WA: {{ $trx->outlet->phone }}</div>@endif
     <hr>
     <div class="row s"><span>{{ $trx->number }}</span><span>{{ $trx->created_at->format('d/m/Y H:i') }}</span></div>
     <div class="row s"><span>Kasir: {{ $trx->cashier->name }}</span><span>{{ \App\Models\Transaction::CHANNELS[$trx->channel] }}</span></div>

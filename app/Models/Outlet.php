@@ -10,7 +10,7 @@ class Outlet extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['name', 'address', 'phone'];
+    protected $fillable = ['name', 'receipt_name', 'address', 'phone'];
 
     public function users(): HasMany
     {
@@ -40,5 +40,11 @@ class Outlet extends Model
     public function openShift(): ?Shift
     {
         return $this->shifts()->where('status', 'open')->latest('opened_at')->first();
+    }
+
+    /** Judul nota: diisi owner per outlet, atau nama toko + nama outlet. */
+    public function receiptTitle(): string
+    {
+        return $this->receipt_name ?: trim(Setting::get('store_name').' '.$this->name);
     }
 }

@@ -36,8 +36,8 @@ class Settings extends Page implements HasForms
     {
         return $form->statePath('data')->schema([
             Section::make('Identitas toko & struk')->columns(2)->schema([
-                TextInput::make('store_name')->label('Nama toko')->required(),
-                TextInput::make('store_tagline')->label('Tagline'),
+                TextInput::make('store_name')->label('Nama toko')->required()
+                    ->helperText('Dipakai di laporan harian, dan sebagai judul nota bila "Judul nota" outlet dikosongkan. Judul, alamat & No. HP nota diatur per outlet di menu Outlet.'),
                 Textarea::make('receipt_footer')->label('Catatan bawah struk')->columnSpanFull(),
             ]),
             Section::make('Notifikasi ke HP owner')->columns(2)->schema([

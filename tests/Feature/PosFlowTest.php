@@ -246,6 +246,20 @@ class PosFlowTest extends TestCase
         $this->assertSame(-5000, $shift->fresh()->cash_difference);
     }
 
+    public function test_receipt_header_uses_outlet_title_address_and_phone(): void
+    {
+        [$outlet, $kasir, $shift] = $this->setupShift();
+        $trx = app(PosService::class)->checkout($kasir, $shift, [$this->line($outlet, 'Coklat Lava')], 'cash', 'offline', 13000);
+        $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
+
+        // Tanpa judul khusus: nama toko + nama outlet.
+        $this->get(route('receipt', $trx))->assertOk()->assertSee('JELLY POTTER Tembalang')->assertDontSee('HP/WA');
+
+        $outlet->update(['receipt_name' => 'Jelly Potter Tembalang', 'address' => 'Jl. Banjarsari No. 5', 'phone' => '0812-0000-1111']);
+        $this->get(route('receipt', $trx))->assertOk()
+            ->assertSeeInOrder(['Jelly Potter Tembalang', 'Jl. Banjarsari No. 5', 'HP/WA: 0812-0000-1111', $trx->number]);
+    }
+
     public function test_void_needs_manager_pin_and_restores_stock(): void
     {
         [$outlet, $kasir, $shift] = $this->setupShift();

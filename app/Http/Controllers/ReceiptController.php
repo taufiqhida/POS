@@ -14,8 +14,6 @@ class ReceiptController extends Controller
 
         return view('pos.receipt', [
             'trx' => $transaction,
-            'store' => Setting::get('store_name'),
-            'tagline' => Setting::get('store_tagline'),
             'footer' => Setting::get('receipt_footer'),
             'digitalUrl' => URL::signedRoute('receipt.public', $transaction),
             'print' => request()->boolean('print'),
