@@ -4,12 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Menu extends Model
 {
-    use HasUuids;
+    use HasUuids, SoftDeletes;
 
     protected $fillable = ['outlet_id', 'name', 'category', 'image', 'base_price', 'free_toppings', 'topping_group', 'is_active', 'is_best'];
 
@@ -31,7 +32,7 @@ class Menu extends Model
             ->join('menus', 'menus.id', '=', 'transaction_items.menu_id')
             ->where('transactions.outlet_id', $outletId)->where('transactions.status', 'paid')
             ->where('transactions.created_at', '>=', now()->subDays(30))
-            ->where('menus.is_active', true)
+            ->where('menus.is_active', true)->whereNull('menus.deleted_at')
             ->groupBy('transaction_items.menu_id')
             ->orderByRaw('SUM(transaction_items.qty) DESC')
             ->limit($limit)->pluck('transaction_items.menu_id')->all();

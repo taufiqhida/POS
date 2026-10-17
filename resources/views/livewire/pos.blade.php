@@ -390,9 +390,9 @@
                     <div class="card-header">
                         <div>
                             <h2 class="card-title">Stok bahan & cek fisik</h2>
-                            <p class="text-xs text-slate-500">Isi kolom “Fisik” hanya untuk bahan yang dihitung.</p>
+                            <p class="text-xs text-slate-500">Hitung semua bahan. <b>Kosongkan</b> kalau jumlahnya sama dengan sistem — cukup ketik yang berbeda.</p>
                         </div>
-                        <button class="btn btn-primary btn-sm ml-auto">Simpan hitungan</button>
+                        <button class="btn btn-primary btn-sm ml-auto">Simpan cek stok</button>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -416,7 +416,7 @@
                                     </td>
                                     <td class="px-3 text-right tabular-nums {{ $i->isCritical() ? 'font-semibold text-rose-700' : '' }}">{{ $num($i->stock_current) }} <span class="text-xs text-slate-400">{{ $i->unit }}</span></td>
                                     <td class="px-3 text-right tabular-nums text-slate-400">{{ $num($i->stock_min) }}</td>
-                                    <td class="px-3 text-right"><input type="number" step="0.01" wire:model.live.debounce.400ms="physical.{{ $i->id }}" class="input h-9 w-24 ml-auto text-right text-sm tabular-nums" aria-label="Stok fisik {{ $i->name }}"></td>
+                                    <td class="px-3 text-right"><input type="number" step="0.01" wire:model.live.debounce.400ms="physical.{{ $i->id }}" class="input h-9 w-24 ml-auto text-right text-sm tabular-nums" placeholder="{{ $num($i->stock_current) }}" aria-label="Stok fisik {{ $i->name }}"></td>
                                     <td class="px-5 text-right font-medium tabular-nums">
                                         @if (isset($physical[$i->id]) && $physical[$i->id] !== '' && is_numeric($physical[$i->id]))
                                             @php($d = $physical[$i->id] - $i->stock_current)

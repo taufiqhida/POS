@@ -130,7 +130,7 @@ class PosFlowTest extends TestCase
         $this->assertSame(32000, $trx->total);
         $this->assertSame(18000, $trx->change_amount);
         $this->assertSame($kasir->id, $trx->cashier_id);
-        $this->assertEquals($boba - 80, $this->stock($outlet, 'Boba'));
+        $this->assertEquals($boba - 2, $this->stock($outlet, 'Boba')); // 1 bungkus per porsi × 2 cup
         $this->assertEquals($cup - 2, $this->stock($outlet, 'Cup Jelly Potter'));
         $this->assertSame(1, $trx->items->first()->toppings->where('price_each', 0)->count());
     }
@@ -244,6 +244,40 @@ class PosFlowTest extends TestCase
 
         $this->assertSame('closed', $shift->fresh()->status);
         $this->assertSame(-5000, $shift->fresh()->cash_difference);
+    }
+
+    public function test_drink_stock_is_counted_per_bungkus(): void
+    {
+        $outlet = Outlet::where('name', 'Grafika')->first();
+        $drinkRecipes = \App\Models\Recipe::with('ingredient')
+            ->whereHas('menu', fn ($q) => $q->where('outlet_id', $outlet->id)->where('topping_group', 'minuman'))->get();
+
+        $this->assertTrue($drinkRecipes->every(fn ($r) => (float) $r->qty === 1.0));
+        $this->assertTrue($drinkRecipes->every(fn ($r) => in_array($r->ingredient->unit, ['bungkus', 'pcs'])));
+        $this->assertFalse($drinkRecipes->contains(fn ($r) => in_array($r->ingredient->name, ['Es Batu', 'Air Mineral'])));
+
+        // Es batu tetap ada untuk dicek fisik (kantong), makanan memakai bahan sendiri dalam gram.
+        $this->assertSame('kantong', Ingredient::where('outlet_id', $outlet->id)->where('name', 'Es Batu')->value('unit'));
+        $this->assertSame('gram', Ingredient::where('outlet_id', $outlet->id)->where('name', 'Choco Chips (makanan)')->value('unit'));
+        $this->assertSame('bungkus', Ingredient::where('outlet_id', $outlet->id)->where('name', 'Choco Chips')->value('unit'));
+    }
+
+    public function test_stock_check_blank_means_matches_system(): void
+    {
+        [$outlet, $kasir] = $this->setupShift();
+        $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
+        $boba = Ingredient::where('outlet_id', $outlet->id)->where('name', 'Boba')->first();
+        $total = Ingredient::where('outlet_id', $outlet->id)->count();
+
+        Livewire::test(Pos::class)
+            ->set('tab', 'stok')
+            ->set("physical.{$boba->id}", $boba->stock_current - 3)   // hanya Boba yang berbeda
+            ->call('saveStockCount')
+            ->assertDispatched('toast', message: 'Cek stok disimpan: 1 bahan dikoreksi, sisanya sesuai.');
+
+        $this->assertSame($total, \App\Models\StockCount::count());     // semua bahan tercatat sudah dicek
+        $this->assertSame(1, \App\Models\StockCount::where('difference', '!=', 0)->count());
+        $this->assertEquals($boba->stock_current - 3, $boba->fresh()->stock_current);
     }
 
     public function test_receipt_header_uses_outlet_title_address_and_phone(): void

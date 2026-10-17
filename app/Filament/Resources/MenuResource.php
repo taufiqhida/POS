@@ -106,8 +106,9 @@ class MenuResource extends Resource
             Tables\Actions\Action::make('copy')->label('Salin ke outlet lain')->icon('heroicon-o-document-duplicate')
                 ->form([Forms\Components\Select::make('outlet_id')->label('Outlet tujuan')->relationship('outlet', 'name')->required()])
                 ->action(function (Menu $record, array $data) {
-                    $copy = $record->replicate()->fill(['outlet_id' => $data['outlet_id']]);
-                    $copy->save();
+                    // Salin hanya kolom menu (bukan kolom hitungan tabel seperti recipes_count). Tanda Best tidak ikut.
+                    $copy = Menu::create(['outlet_id' => $data['outlet_id'], 'is_best' => false]
+                        + $record->only(['name', 'category', 'image', 'base_price', 'free_toppings', 'topping_group', 'is_active']));
                     $map = [];
                     foreach ($record->variants as $v) {
                         $map[$v->id] = $copy->variants()->create($v->only('size', 'price'))->id;
@@ -121,7 +122,8 @@ class MenuResource extends Resource
                     }
                     Notification::make()->title('Menu disalin')->success()->send();
                 }),
-            Tables\Actions\DeleteAction::make(),
+            Tables\Actions\DeleteAction::make()
+                ->modalDescription('Menu hilang dari kasir & daftar menu. Riwayat penjualan dan laporan menu ini tetap tersimpan.'),
         ])->defaultSort('name');
     }
 

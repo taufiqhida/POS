@@ -38,9 +38,26 @@ class MenuSeeder extends Seeder
 
     private const ONLY_GRAFIKA = ['Grafika'];
 
-    private const JP_PACK = [['Tutup Cup', 1], ['Sealer', 1], ['Sedotan', 1], ['Jelly', 40]];
+    /*
+     * Stok MINUMAN dihitung per bungkus/saset: tiap bahan rasa = 1 bungkus per cup, kemasan = 1 pcs per cup.
+     * Es batu & air tidak dipotong per cup (takaran skop tidak pasti) — es batu dipantau lewat cek stok fisik
+     * dan pembeliannya dicatat sebagai pengeluaran shift.
+     */
+    private const JP_PACK = [['Tutup Cup', 1], ['Sealer', 1], ['Sedotan', 1], ['Jelly', 1]];
 
-    private const TEH_PACK = [['Cup Es Teh', 1], ['Sealer', 1], ['Sedotan', 1], ['Es Batu', 150]];
+    private const TEH_PACK = [['Cup Es Teh', 1], ['Sealer', 1], ['Sedotan', 1]];
+
+    /** Tidak dipotong otomatis saat penjualan minuman. */
+    private const NOT_PER_CUP = ['Es Batu', 'Air Mineral'];
+
+    /** Bahan minuman yang dihitung per pcs (bukan bungkus). */
+    private const PACKAGING = ['Cup Jelly Potter', 'Cup Medium', 'Cup Es Teh', 'Tutup Cup', 'Sealer', 'Sedotan', 'Yakult'];
+
+    /** Es batu tetap ada di daftar stok (satuan kantong) untuk dicek fisik, tanpa resep. */
+    private const ICE = ['Es Batu', 'kantong', 10, 3];
+
+    /** Nama bahan yang sudah dipakai minuman (satuan bungkus) — makanan memakai nama sendiri agar satuannya tidak tercampur. */
+    private const FOOD_SUFFIX = ' (makanan)';
 
     /** Menu yang juga dijual dalam ukuran Medium (poster Special Medium Series). */
     private const MEDIUM = [
@@ -81,7 +98,7 @@ class MenuSeeder extends Seeder
                     Recipe::create([
                         'menu_id' => $menu->id,
                         'variant_id' => $size ? $variants[$size] : null,
-                        'ingredient_id' => $this->ingredient($outlet, $ingredient)->id,
+                        'ingredient_id' => $this->ingredient($outlet, $ingredient, $m['group'] === 'minuman')->id,
                         'qty' => $qty,
                     ]);
                 }
@@ -90,25 +107,46 @@ class MenuSeeder extends Seeder
             $groups = array_unique(array_column($mine, 'group'));
             foreach ($toppings as [$group, , $ing]) {
                 if ($ing && in_array($group, $groups)) {
-                    $this->ingredient($outlet, $ing);
+                    $this->ingredient($outlet, $ing, $group === 'minuman');
+                }
+            }
+            if (in_array('minuman', $groups)) {
+                [$name, $unit, $stock, $min] = self::ICE;
+                $ice = Ingredient::firstOrCreate(['outlet_id' => $outlet->id, 'name' => $name],
+                    ['unit' => $unit, 'stock_current' => $stock, 'stock_min' => $min]);
+                if ($ice->unit !== $unit) {
+                    $ice->update(['unit' => $unit, 'stock_current' => $stock, 'stock_min' => $min]);
                 }
             }
             Menu::where('outlet_id', $outlet->id)->whereNotIn('name', array_column($mine, 'name'))->update(['is_active' => false]);
+            $this->removeUnusedIngredients($outlet, $toppings, $groups);
         }
+    }
+
+    /** Hapus bahan yang tidak dipakai resep/topping mana pun DAN belum punya riwayat stok (mis. bahan lama yang diganti). */
+    private function removeUnusedIngredients(Outlet $outlet, array $toppings, array $groups): void
+    {
+        $toppingNames = collect($toppings)->filter(fn ($t) => $t[2] && in_array($t[0], $groups))->pluck(2)->all();
+        Ingredient::where('outlet_id', $outlet->id)
+            ->whereNotIn('name', [...$toppingNames, self::ICE[0]])
+            ->whereDoesntHave('movements')
+            ->whereNotIn('id', Recipe::select('ingredient_id'))
+            ->delete();
     }
 
     /** @return array<string, array{0:string,1:int,2:?string,3:float}> nama => [grup, harga, bahan, takaran] */
     private function toppings(): array
     {
         $t = [
-            'Jelly Cendol' => ['minuman', self::DRINK_TOPPING_PRICE, 'Jelly Cendol', 30],
-            'Choco Chips' => ['minuman', self::DRINK_TOPPING_PRICE, 'Choco Chips', 10],
-            'Boba' => ['minuman', self::DRINK_TOPPING_PRICE, 'Boba', 40],
-            'Rodeo' => ['minuman', self::DRINK_TOPPING_PRICE, 'Rodeo', 10],
+            // Topping minuman: 1 bungkus per porsi.
+            'Jelly Cendol' => ['minuman', self::DRINK_TOPPING_PRICE, 'Jelly Cendol', 1],
+            'Choco Chips' => ['minuman', self::DRINK_TOPPING_PRICE, 'Choco Chips', 1],
+            'Boba' => ['minuman', self::DRINK_TOPPING_PRICE, 'Boba', 1],
+            'Rodeo' => ['minuman', self::DRINK_TOPPING_PRICE, 'Rodeo', 1],
 
-            'Isian Chocochips' => ['waffle', 4000, 'Choco Chips', 15],
+            'Isian Chocochips' => ['waffle', 4000, 'Choco Chips'.self::FOOD_SUFFIX, 15],
             'Isian Keju' => ['waffle', 4000, 'Keju Parut', 15],
-            'Isian Oreo' => ['waffle', 4000, 'Oreo Crumble', 15],
+            'Isian Oreo' => ['waffle', 4000, 'Oreo Crumble'.self::FOOD_SUFFIX, 15],
 
             'Extra Telur' => ['makanan', 3000, 'Telur', 1],
             'Extra Keju' => ['makanan', 2000, 'Keju Slice', 1],
@@ -134,7 +172,11 @@ class MenuSeeder extends Seeder
                 'sizes' => $opt['sizes'] ?? [], 'outlets' => $opt['outlets'] ?? [],
             ];
         };
-        $jp = function (string $name, string $cat, array $extra, int $price = self::JP_PRICE) use ($add) {
+        // Minuman: setiap bahan rasa = 1 bungkus/saset per cup; es batu & air tidak dipotong.
+        $perCup = fn (array $rows) => array_values(array_map(fn ($r) => [$r[0], 1],
+            array_filter($rows, fn ($r) => ! in_array($r[0], self::NOT_PER_CUP))));
+        $jp = function (string $name, string $cat, array $extra, int $price = self::JP_PRICE) use ($add, $perCup) {
+            $extra = $perCup($extra);
             $medium = in_array($name, self::MEDIUM);
             $sizes = $medium ? (in_array($name, self::MEDIUM_ONLY) ? ['Medium' => self::MEDIUM_PRICE]
                 : ['Reguler' => $price, 'Medium' => self::MEDIUM_PRICE]) : [];
@@ -143,7 +185,7 @@ class MenuSeeder extends Seeder
                 : [['Cup Jelly Potter', 1]];
             $add($name, $cat, $sizes['Reguler'] ?? $sizes['Medium'] ?? $price, [...$cups, ...self::JP_PACK, ...$extra], ['free' => 1, 'sizes' => $sizes]);
         };
-        $teh = fn (string $name, string $cat, int $price, array $extra) => $add($name, $cat, $price, [...self::TEH_PACK, ...$extra]);
+        $teh = fn (string $name, string $cat, int $price, array $extra) => $add($name, $cat, $price, [...self::TEH_PACK, ...$perCup($extra)]);
 
         // ================= JELLY POTTER =================
         $choco = [
@@ -341,9 +383,9 @@ class MenuSeeder extends Seeder
     private function maryamRecipe(string $n): array
     {
         $map = [
-            'Meses' => ['Meses', 15], 'Chocochip' => ['Choco Chips', 10], 'Glaze' => ['Coklat Glaze', 15],
-            'Crunchy' => ['Coklat Crunchy', 15], 'Susu' => ['Susu Kental Manis', 15], 'Keju' => ['Keju Parut', 15],
-            'Selai' => ['Selai', 15], 'Matcha' => ['Powder Matcha', 10], 'Gula Halus' => ['Gula Halus', 10],
+            'Meses' => ['Meses', 15], 'Chocochip' => ['Choco Chips'.self::FOOD_SUFFIX, 10], 'Glaze' => ['Coklat Glaze', 15],
+            'Crunchy' => ['Coklat Crunchy', 15], 'Susu' => ['Susu Kental Manis'.self::FOOD_SUFFIX, 15], 'Keju' => ['Keju Parut', 15],
+            'Selai' => ['Selai', 15], 'Matcha' => ['Powder Matcha'.self::FOOD_SUFFIX, 10], 'Gula Halus' => ['Gula Halus', 10],
             'Daging Sapi' => ['Daging Sapi', 30], 'Mayonaise' => ['Mayonaise', 15], 'Selada' => ['Selada', 10], 'Sosis' => ['Sosis', 1],
         ];
         if (str_contains($n, 'Special')) {
@@ -377,8 +419,23 @@ class MenuSeeder extends Seeder
         return $ids;
     }
 
-    private function ingredient(Outlet $outlet, string $name): Ingredient
+    private function ingredient(Outlet $outlet, string $name, bool $drink = false): Ingredient
     {
+        if ($drink) {
+            // Minuman: kemasan per pcs, bahan rasa per bungkus/saset.
+            [$unit, $stock, $min] = in_array($name, self::PACKAGING)
+                ? ['pcs', $name === 'Yakult' ? 60 : 500, $name === 'Yakult' ? 12 : 80]
+                : ['bungkus', 50, 10];
+            $ing = Ingredient::firstOrCreate(['outlet_id' => $outlet->id, 'name' => $name],
+                ['unit' => $unit, 'stock_current' => $stock, 'stock_min' => $min]);
+            // Bahan lama yang masih gram/ml diubah ke bungkus; angka stok lama tidak bermakna lagi, jadi disetel ulang.
+            if ($ing->unit !== $unit) {
+                $ing->update(['unit' => $unit, 'stock_current' => $stock, 'stock_min' => $min]);
+            }
+
+            return $ing;
+        }
+
         $unit = match (true) {
             (bool) preg_match('/^(Cup|Tutup|Sealer|Sedotan|Yakult|Kertas|Adonan Croffle|Kulit Tortilla|Roti|Telur|Sosis|Keju Slice|Patties)/', $name) => 'pcs',
             (bool) preg_match('/^(Susu|Sirup|Teh|Air|Gula Aren|Madu)/', $name) => 'ml',

@@ -393,26 +393,28 @@ class Pos extends Component
 
     public function saveStockCount(): void
     {
-        $rows = array_filter($this->physical, fn ($v) => $v !== '' && $v !== null);
-        if (! $rows) {
-            $this->toast('Isi minimal satu hitungan fisik.', 'error');
+        // Kolom yang dikosongkan = sudah dicek & sesuai sistem; hanya yang berbeda perlu diketik.
+        foreach ($this->physical as $id => $v) {
+            if ($v !== '' && $v !== null && (! is_numeric($v) || $v < 0)) {
+                $this->toast('Isi hitungan fisik dengan angka 0 atau lebih.', 'error');
 
-            return;
+                return;
+            }
         }
-        DB::transaction(function () use ($rows) {
-            foreach ($rows as $id => $qty) {
-                $ing = Ingredient::where('outlet_id', $this->outletId)->find($id);
-                if (! $ing || ! is_numeric($qty)) {
-                    continue;
-                }
+        $changed = 0;
+        DB::transaction(function () use (&$changed) {
+            foreach ($this->ingredients as $ing) {
+                $v = $this->physical[$ing->id] ?? null;
+                $qty = ($v === '' || $v === null) ? $ing->stock_current : (float) $v;
+                $changed += $qty != $ing->stock_current ? 1 : 0;
                 $diff = (float) $qty - $ing->stock_current;
                 StockCount::create([
-                    'outlet_id' => $this->outletId, 'ingredient_id' => $id, 'user_id' => Auth::id(),
+                    'outlet_id' => $this->outletId, 'ingredient_id' => $ing->id, 'user_id' => Auth::id(),
                     'system_qty' => $ing->stock_current, 'physical_qty' => $qty, 'difference' => $diff,
                 ]);
                 if ($diff != 0) {
                     StockMovement::create([
-                        'outlet_id' => $this->outletId, 'ingredient_id' => $id, 'qty_change' => $diff,
+                        'outlet_id' => $this->outletId, 'ingredient_id' => $ing->id, 'qty_change' => $diff,
                         'reason' => $diff < 0 ? 'waste' : 'adjustment', 'user_id' => Auth::id(), 'note' => 'Cek stok fisik',
                     ]);
                     $ing->update(['stock_current' => $qty]);
@@ -421,7 +423,9 @@ class Pos extends Component
         });
         $this->physical = [];
         unset($this->ingredients, $this->usageHistory);
-        $this->toast('Hitungan stok fisik disimpan.');
+        $this->toast($changed
+            ? "Cek stok disimpan: {$changed} bahan dikoreksi, sisanya sesuai."
+            : 'Cek stok disimpan: semua bahan sesuai sistem.');
     }
 
     // ---------- Helpers ----------
