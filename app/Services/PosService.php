@@ -144,6 +144,52 @@ class PosService
         });
     }
 
+    /** Kasir mengajukan void/refund. Transaksi tetap dihitung sampai disetujui owner/manager. */
+    public function requestCancel(Transaction $trx, User $cashier, string $type, string $reason): Transaction
+    {
+        if (! in_array($type, ['void', 'refund'])) {
+            throw ValidationException::withMessages(['type' => 'Jenis pengajuan tidak valid.']);
+        }
+        if ($trx->status !== 'paid') {
+            throw ValidationException::withMessages(['status' => 'Transaksi sudah dibatalkan sebelumnya.']);
+        }
+        if ($trx->cancel_request) {
+            throw ValidationException::withMessages(['status' => 'Transaksi ini sudah diajukan dan menunggu verifikasi.']);
+        }
+
+        $trx->update(['cancel_request' => $type, 'cancel_reason' => $reason,
+            'cancel_requested_by' => $cashier->id, 'cancel_requested_at' => now()]);
+        AuditLog::record($type.'_request', $cashier->id, 'transaction', $trx->id, "{$trx->number}: {$reason}");
+
+        return $trx;
+    }
+
+    /** Owner/manager menyetujui pengajuan: transaksi dibatalkan & stok dikembalikan. */
+    public function approveCancel(Transaction $trx, User $approver): Transaction
+    {
+        if (! $trx->isPendingCancel()) {
+            throw ValidationException::withMessages(['status' => 'Tidak ada pengajuan yang menunggu untuk transaksi ini.']);
+        }
+
+        return $this->cancel($trx, $trx->requester, $approver, $trx->cancel_request, $trx->cancel_reason);
+    }
+
+    /** Owner/manager menolak pengajuan: transaksi tetap sah. */
+    public function rejectCancel(Transaction $trx, User $approver, ?string $note = null): Transaction
+    {
+        if (! $approver->canApprove()) {
+            throw ValidationException::withMessages(['status' => 'Hanya owner/manager yang bisa memverifikasi.']);
+        }
+        if (! $trx->isPendingCancel()) {
+            throw ValidationException::withMessages(['status' => 'Tidak ada pengajuan yang menunggu untuk transaksi ini.']);
+        }
+        AuditLog::record($trx->cancel_request.'_rejected', $trx->cancel_requested_by, 'transaction', $trx->id,
+            "{$trx->number}: ditolak".($note ? " — {$note}" : ''), $approver->id);
+        $trx->update(['cancel_request' => null, 'cancel_reason' => null, 'cancel_requested_by' => null, 'cancel_requested_at' => null]);
+
+        return $trx;
+    }
+
     /** Void (hari yang sama) atau refund. Stok bahan dikembalikan. */
     public function cancel(Transaction $trx, User $actor, User $approver, string $type, string $reason): Transaction
     {

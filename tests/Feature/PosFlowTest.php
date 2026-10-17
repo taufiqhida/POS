@@ -294,22 +294,54 @@ class PosFlowTest extends TestCase
             ->assertSeeInOrder(['Jelly Potter Tembalang', 'Jl. Banjarsari No. 5', 'HP/WA: 0812-0000-1111', $trx->number]);
     }
 
-    public function test_void_needs_manager_pin_and_restores_stock(): void
+    public function test_cashier_void_request_stays_counted_until_manager_approves(): void
     {
         [$outlet, $kasir, $shift] = $this->setupShift();
         $before = $this->stock($outlet, 'Jelly');
         $trx = app(PosService::class)->checkout($kasir, $shift, [$this->line($outlet, 'Coklat Lava')], 'cash', 'offline', 13000);
-        $this->assertLessThan($before, $this->stock($outlet, 'Jelly'));
 
+        // Kasir mengajukan tanpa PIN — alasan wajib.
         $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
         Livewire::test(Pos::class)
-            ->call('askPin', 'void', ['id' => $trx->id])->set('pinReason', 'Salah input')->set('pin', '1111')->call('confirmPin')
-            ->assertHasErrors('pin')
-            ->set('pin', '5678')->call('confirmPin')->assertHasNoErrors();
+            ->set('tab', 'riwayat')
+            ->call('askCancel', $trx->id, 'void')->call('submitCancelRequest')->assertHasErrors('cancelReason')
+            ->set('cancelReason', 'Salah input')->call('submitCancelRequest')->assertHasNoErrors()
+            ->assertSee('Void menunggu verifikasi');
+
+        // Masih "nyantol": tetap lunas, tetap dihitung di kas & penjualan, stok belum kembali.
+        $trx->refresh();
+        $this->assertSame('paid', $trx->status);
+        $this->assertTrue($trx->isPendingCancel());
+        $this->assertSame(13000, $shift->fresh()->cashSales());
+        $this->assertLessThan($before, $this->stock($outlet, 'Jelly'));
+
+        // Owner/manager menyetujui di panel admin.
+        $manager = User::where('role', 'manager')->first();
+        $this->actingAs($manager)->get('/admin/verifikasi-void-refund')->assertOk()->assertSee($trx->number)->assertSee('Salah input');
+        Livewire::test(\App\Filament\Resources\CancelRequestResource\Pages\ManageCancelRequests::class)
+            ->callTableAction('approve', $trx)->assertHasNoTableActionErrors();
 
         $this->assertSame('void', $trx->fresh()->status);
+        $this->assertSame(0, $shift->fresh()->cashSales());
         $this->assertEquals($before, $this->stock($outlet, 'Jelly'));
-        $this->assertDatabaseHas('audit_logs', ['action' => 'void', 'user_id' => $kasir->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'void', 'user_id' => $kasir->id, 'approved_by' => $manager->id]);
+    }
+
+    public function test_rejected_request_keeps_transaction(): void
+    {
+        [$outlet, $kasir, $shift] = $this->setupShift();
+        $trx = app(PosService::class)->checkout($kasir, $shift, [$this->line($outlet, 'Coklat Lava')], 'qris', 'offline', 0);
+        app(PosService::class)->requestCancel($trx, $kasir, 'refund', 'Pembeli komplain');
+
+        $this->actingAs(User::where('role', 'owner')->first());
+        Livewire::test(\App\Filament\Resources\CancelRequestResource\Pages\ManageCancelRequests::class)
+            ->callTableAction('reject', $trx, ['note' => 'Minuman sudah diminum'])->assertHasNoTableActionErrors();
+
+        $trx->refresh();
+        $this->assertSame('paid', $trx->status);
+        $this->assertFalse($trx->isPendingCancel());
+        $this->assertDatabaseHas('audit_logs', ['action' => 'refund_rejected', 'user_id' => $kasir->id]);
+        $this->assertSame(0, \App\Filament\Resources\CancelRequestResource::getEloquentQuery()->count());
     }
 
     public function test_full_livewire_cart_checkout(): void

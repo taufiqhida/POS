@@ -284,8 +284,13 @@
                                     <span class="text-xs text-slate-400 tabular-nums">{{ $t->created_at->format('H:i') }}</span>
                                     @if ($t->status !== 'paid')
                                         <span class="badge bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200">{{ \App\Models\Transaction::STATUSES[$t->status] }}</span>
+                                    @elseif ($t->isPendingCancel())
+                                        <span class="badge bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200">{{ ucfirst($t->cancel_request) }} menunggu verifikasi</span>
                                     @endif
                                 </div>
+                                @if ($t->isPendingCancel())
+                                    <div class="mt-0.5 text-xs text-amber-800">Alasan: {{ $t->cancel_reason }} · diajukan {{ $t->requester?->name }} {{ $t->cancel_requested_at?->format('H:i') }}</div>
+                                @endif
                                 <div class="mt-0.5 truncate text-sm text-slate-600">{{ $t->items->map(fn($i) => $i->qty.'× '.$i->menu_name)->implode(', ') }}</div>
                                 <div class="mt-0.5 text-xs text-slate-500">{{ $t->cashier->name }} · {{ \App\Models\Transaction::METHODS[$t->payment_method] }} · {{ \App\Models\Transaction::CHANNELS[$t->channel] }}</div>
                             </div>
@@ -293,8 +298,10 @@
                             @if ($t->status === 'paid')
                                 <div class="flex gap-1.5">
                                     <a href="{{ route('receipt', $t) }}" target="_blank" class="btn btn-secondary btn-sm">Struk</a>
-                                    <button wire:click="askPin('void', {id: '{{ $t->id }}'})" class="btn btn-secondary btn-sm">Void</button>
-                                    <button wire:click="askPin('refund', {id: '{{ $t->id }}'})" class="btn btn-secondary btn-sm">Refund</button>
+                                    @unless ($t->isPendingCancel())
+                                        <button wire:click="askCancel('{{ $t->id }}', 'void')" class="btn btn-secondary btn-sm">Void</button>
+                                        <button wire:click="askCancel('{{ $t->id }}', 'refund')" class="btn btn-secondary btn-sm">Refund</button>
+                                    @endunless
                                 </div>
                             @endif
                         </li>
@@ -605,6 +612,37 @@
                     <button wire:click="newOrder" class="btn btn-primary btn-lg w-full">Pesanan baru</button>
                 </div>
             </div>
+        </div>
+    @endif
+
+    {{-- ================= MODAL: ajukan void / refund ================= --}}
+    @if ($cancelId)
+        @php($ct = $this->history->firstWhere('id', $cancelId))
+        <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="cancel-title">
+            <form wire:submit="submitCancelRequest" class="modal sm:max-w-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 id="cancel-title" class="text-base font-semibold">Ajukan {{ $cancelType }} {{ $ct?->number }}</h3>
+                    <p class="mt-1 text-xs text-slate-500">Transaksi tetap dihitung sampai disetujui owner/manager di panel admin.</p>
+                </div>
+                <div class="space-y-3 px-5 py-4">
+                    @if ($ct)
+                        <div class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-inset ring-slate-200">
+                            <span class="truncate text-slate-600">{{ $ct->items->map(fn($i) => $i->qty.'× '.$i->menu_name)->implode(', ') }}</span>
+                            <span class="ml-3 font-semibold tabular-nums">{{ $rp($ct->total) }}</span>
+                        </div>
+                    @endif
+                    <div>
+                        <label class="label" for="cancelReason">Alasan</label>
+                        <input id="cancelReason" wire:model="cancelReason" placeholder="mis. salah input pesanan" class="input h-11" autofocus>
+                        @error('cancelReason') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                        @error('status') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+                <div class="flex gap-2 border-t border-slate-200 px-5 py-4">
+                    <button type="button" wire:click="$set('cancelId', null)" class="btn btn-secondary">Batal</button>
+                    <button class="btn btn-danger flex-1">Kirim pengajuan</button>
+                </div>
+            </form>
         </div>
     @endif
 

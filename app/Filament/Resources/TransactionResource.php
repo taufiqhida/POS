@@ -40,8 +40,10 @@ class TransactionResource extends Resource
             Tables\Columns\TextColumn::make('total')->label('Total')->money('IDR', locale: 'id')->weight('bold')
                 ->summarize(Tables\Columns\Summarizers\Sum::make()->label('Total')->money('IDR', locale: 'id')
                     ->query(fn ($query) => $query->where('status', 'paid'))),
-            Tables\Columns\TextColumn::make('status')->badge()->formatStateUsing(fn ($state) => Transaction::STATUSES[$state])
-                ->color(fn ($state) => $state === 'paid' ? 'success' : 'danger'),
+            Tables\Columns\TextColumn::make('status')->badge()
+                ->formatStateUsing(fn ($state, Transaction $record) => $record->isPendingCancel()
+                    ? ucfirst($record->cancel_request).' diajukan' : Transaction::STATUSES[$state])
+                ->color(fn ($state, Transaction $record) => $record->isPendingCancel() ? 'warning' : ($state === 'paid' ? 'success' : 'danger')),
         ])->filters([
             Tables\Filters\SelectFilter::make('outlet_id')->relationship('outlet', 'name')->label('Outlet'),
             Tables\Filters\SelectFilter::make('cashier_id')->relationship('cashier', 'name')->label('Pegawai'),

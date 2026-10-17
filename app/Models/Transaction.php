@@ -18,7 +18,20 @@ class Transaction extends Model
     public const STATUSES = ['paid' => 'Lunas', 'void' => 'Void', 'refunded' => 'Refund'];
 
     protected $fillable = ['number', 'outlet_id', 'shift_id', 'cashier_id', 'payment_method', 'channel', 'subtotal',
-        'discount', 'discount_label', 'total', 'paid_amount', 'change_amount', 'status'];
+        'discount', 'discount_label', 'total', 'paid_amount', 'change_amount', 'status',
+        'cancel_request', 'cancel_reason', 'cancel_requested_by', 'cancel_requested_at'];
+
+    protected $casts = ['cancel_requested_at' => 'datetime'];
+
+    public function requester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancel_requested_by');
+    }
+
+    public function isPendingCancel(): bool
+    {
+        return $this->status === 'paid' && $this->cancel_request !== null;
+    }
 
     public function outlet(): BelongsTo
     {

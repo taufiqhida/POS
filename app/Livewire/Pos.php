@@ -309,15 +309,40 @@ class Pos extends Component
                 $this->manualDiscount = $this->pinValue;
                 $this->approverId = $approver->id;
                 break;
-            case 'void':
-            case 'refund':
-                $this->validate(['pinReason' => 'required|string|max:200'], [], ['pinReason' => 'alasan']);
-                $trx = Transaction::where('outlet_id', $this->outletId)->findOrFail($this->pinContext['id']);
-                $pos->cancel($trx, Auth::user(), $approver, $this->pinAction, $this->pinReason);
-                $this->toast(($this->pinAction === 'void' ? 'Void' : 'Refund')." {$trx->number} berhasil.");
-                break;
         }
         $this->pinAction = null;
+    }
+
+    // ---------- Pengajuan void/refund (diverifikasi owner/manager di panel admin) ----------
+
+    public ?string $cancelId = null;
+
+    public string $cancelType = 'void';
+
+    public string $cancelReason = '';
+
+    public function askCancel(string $id, string $type): void
+    {
+        $this->cancelId = $id;
+        $this->cancelType = $type === 'refund' ? 'refund' : 'void';
+        $this->cancelReason = '';
+        $this->resetErrorBag();
+    }
+
+    public function submitCancelRequest(PosService $pos): void
+    {
+        $this->validate(['cancelReason' => 'required|string|max:200'], [], ['cancelReason' => 'alasan']);
+        $trx = Transaction::where('outlet_id', $this->outletId)->findOrFail($this->cancelId);
+        try {
+            $pos->requestCancel($trx, Auth::user(), $this->cancelType, $this->cancelReason);
+        } catch (ValidationException $e) {
+            $this->setErrorBag($e->validator->errors());
+
+            return;
+        }
+        $this->cancelId = null;
+        unset($this->history);
+        $this->toast("Pengajuan {$this->cancelType} {$trx->number} terkirim. Menunggu verifikasi owner/manager.");
     }
 
     private function findApprover(string $pin): ?User
@@ -373,7 +398,7 @@ class Pos extends Component
     #[Computed]
     public function history()
     {
-        return Transaction::with(['cashier', 'items'])->where('outlet_id', $this->outletId)
+        return Transaction::with(['cashier', 'items', 'requester'])->where('outlet_id', $this->outletId)
             ->whereDate('created_at', today())->latest()->limit(100)->get();
     }
 
