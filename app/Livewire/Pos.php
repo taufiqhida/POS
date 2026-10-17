@@ -126,6 +126,36 @@ class Pos extends Component
         return $best ? $menus->sortBy(fn ($m) => array_search($m->id, $this->best[0]))->values() : $menus;
     }
 
+    /**
+     * ID menu yang bahannya tidak cukup untuk 1 porsi (stok habis). Menu dengan ukuran dianggap habis
+     * bila bahan umumnya habis, atau semua ukurannya kekurangan bahan khusus ukuran (mis. cup).
+     *
+     * @return array<string, true>
+     */
+    #[Computed]
+    public function outOfStock(): array
+    {
+        $rows = \App\Models\Recipe::query()
+            ->join('menus', 'menus.id', '=', 'recipes.menu_id')
+            ->join('ingredients', 'ingredients.id', '=', 'recipes.ingredient_id')
+            ->where('menus.outlet_id', $this->outletId)->whereNull('menus.deleted_at')
+            ->whereColumn('ingredients.stock_current', '<', 'recipes.qty')
+            ->get(['recipes.menu_id', 'recipes.variant_id']);
+        $sizes = \App\Models\MenuVariant::whereIn('menu_id', $rows->pluck('menu_id')->unique())->get()->groupBy('menu_id');
+
+        $out = [];
+        foreach ($rows->groupBy('menu_id') as $menuId => $lacking) {
+            $general = $lacking->contains(fn ($r) => $r->variant_id === null);
+            $allSizes = ($sizes[$menuId] ?? collect())->isNotEmpty()
+                && ($sizes[$menuId])->every(fn ($v) => $lacking->contains('variant_id', $v->id));
+            if ($general || $allSizes) {
+                $out[$menuId] = true;
+            }
+        }
+
+        return $out;
+    }
+
     /** Kategori khusus untuk tab ⭐ Best. */
     public const BEST = '__best';
 
@@ -151,18 +181,56 @@ class Pos extends Component
     #[Computed]
     public function priced(): array
     {
+        $empty = ['lines' => [], 'subtotal' => 0, 'discount' => 0, 'discount_label' => null, 'total' => 0];
+        $this->pruneCart();
         if (empty($this->cart)) {
-            return ['lines' => [], 'subtotal' => 0, 'discount' => 0, 'discount_label' => null, 'total' => 0];
+            return $empty;
         }
 
         return app(PosService::class)->price($this->outletId, array_values($this->cart), $this->manualDiscount);
+    }
+
+    /**
+     * Keluarkan item yang menunya baru saja dinonaktifkan/dihapus owner (atau ukurannya dihapus),
+     * supaya layar kasir tidak error dan kasir tahu kenapa item hilang.
+     */
+    private function pruneCart(): void
+    {
+        if (empty($this->cart)) {
+            return;
+        }
+        $menus = Menu::with('variants')->where('outlet_id', $this->outletId)->where('is_active', true)
+            ->whereIn('id', array_column($this->cart, 'menu_id'))->get()->keyBy('id');
+        $removed = [];
+        foreach ($this->cart as $key => $line) {
+            $menu = $menus[$line['menu_id']] ?? null;
+            $sizeGone = $menu && ($line['variant_id']
+                ? ! $menu->variants->contains('id', $line['variant_id'])
+                : $menu->variants->isNotEmpty());
+            if (! $menu || $sizeGone) {
+                $removed[] = $line['name'];
+                unset($this->cart[$key]);
+            }
+        }
+        if ($removed) {
+            $this->afterCartShrink();
+            $this->toast(implode(', ', $removed).' sudah tidak tersedia dan dikeluarkan dari pesanan.', 'error');
+        }
+    }
+
+    /** Pesanan kosong = pelanggan baru: diskon manual & persetujuan PIN tidak boleh terbawa. */
+    private function afterCartShrink(): void
+    {
+        if (empty($this->cart)) {
+            $this->reset('manualDiscount', 'approverId', 'cartOpen');
+        }
     }
 
     // ---------- Shift ----------
 
     public function openShift(ShiftService $svc): void
     {
-        $this->validate(['openingCash' => 'required|integer|min:0'], [], ['openingCash' => 'modal awal']);
+        $this->validate(['openingCash' => 'required|integer|min:0|max:'.PosService::MAX_MONEY], [], ['openingCash' => 'modal awal']);
         $svc->open(Auth::user(), $this->outlet, $this->openingCash);
         $this->openingCash = null;
         $this->closedShiftId = null;
@@ -172,7 +240,7 @@ class Pos extends Component
 
     public function addExpense(): void
     {
-        $this->validate(['expenseDesc' => 'required|string|max:200', 'expenseAmount' => 'required|integer|min:1'], [], ['expenseDesc' => 'keterangan', 'expenseAmount' => 'jumlah']);
+        $this->validate(['expenseDesc' => 'required|string|max:200', 'expenseAmount' => 'required|integer|min:1|max:'.PosService::MAX_MONEY], [], ['expenseDesc' => 'keterangan', 'expenseAmount' => 'jumlah']);
         $this->requireShift()->expenses()->create(['description' => $this->expenseDesc, 'amount' => $this->expenseAmount, 'created_by' => Auth::id()]);
         AuditLog::record('expense', Auth::id(), 'shift', $this->shift->id, "{$this->expenseDesc}: Rp".number_format($this->expenseAmount, 0, ',', '.'));
         $this->reset('expenseDesc', 'expenseAmount');
@@ -182,13 +250,13 @@ class Pos extends Component
     /** Langkah 1: cek isian, lalu tampilkan konfirmasi di dalam aplikasi (bukan confirm() bawaan browser). */
     public function confirmCloseShift(): void
     {
-        $this->validate(['actualCash' => 'required|integer|min:0'], [], ['actualCash' => 'cash fisik']);
+        $this->validate(['actualCash' => 'required|integer|min:0|max:'.PosService::MAX_MONEY], [], ['actualCash' => 'cash fisik']);
         $this->confirmingClose = true;
     }
 
     public function closeShift(ShiftService $svc): void
     {
-        $this->validate(['actualCash' => 'required|integer|min:0'], [], ['actualCash' => 'cash fisik']);
+        $this->validate(['actualCash' => 'required|integer|min:0|max:'.PosService::MAX_MONEY], [], ['actualCash' => 'cash fisik']);
         $this->confirmingClose = false;
         $shift = $svc->close($this->requireShift(), Auth::user(), $this->actualCash, $this->closeNote ?: null);
         $this->closedShiftId = $shift->id;
@@ -212,6 +280,11 @@ class Pos extends Component
 
     public function toggleTopping(string $id): void
     {
+        // Hanya topping dari grup menu yang sedang dipilih (mis. topping minuman untuk minuman).
+        $group = Menu::find($this->pickMenuId)?->topping_group;
+        if (! in_array($id, $this->pickToppings) && ! $this->toppings->where('group', $group)->contains('id', $id)) {
+            return;
+        }
         $this->pickToppings = in_array($id, $this->pickToppings)
             ? array_values(array_diff($this->pickToppings, [$id]))
             : [...$this->pickToppings, $id];
@@ -256,13 +329,13 @@ class Pos extends Component
         if ($this->cart[$key]['qty'] < 1) {
             unset($this->cart[$key]);
         }
-        $this->cartOpen = $this->cartOpen && ! empty($this->cart);
+        $this->afterCartShrink();
     }
 
     public function removeLine(string $key): void
     {
         unset($this->cart[$key]);
-        $this->cartOpen = $this->cartOpen && ! empty($this->cart);
+        $this->afterCartShrink();
     }
 
     public function clearCart(): void
@@ -304,13 +377,13 @@ class Pos extends Component
 
                     return;
                 }
-                $this->validate(['pinValue' => 'required|integer|min:0'], [], ['pinValue' => 'harga baru']);
+                $this->validate(['pinValue' => 'required|integer|min:0|max:'.PosService::MAX_MONEY], [], ['pinValue' => 'harga baru']);
                 $this->cart[$this->pinContext['key']]['price_override'] = $this->pinValue;
                 $this->cart[$this->pinContext['key']]['sig'] .= '|o';
                 $this->approverId = $approver->id;
                 break;
             case 'discount':
-                $this->validate(['pinValue' => 'required|integer|min:0'], [], ['pinValue' => 'diskon']);
+                $this->validate(['pinValue' => 'required|integer|min:0|max:'.PosService::MAX_MONEY], [], ['pinValue' => 'diskon']);
                 $this->manualDiscount = $this->pinValue;
                 $this->approverId = $approver->id;
                 break;
@@ -426,8 +499,8 @@ class Pos extends Component
     {
         // Kolom yang dikosongkan = sudah dicek & sesuai sistem; hanya yang berbeda perlu diketik.
         foreach ($this->physical as $id => $v) {
-            if ($v !== '' && $v !== null && (! is_numeric($v) || $v < 0)) {
-                $this->toast('Isi hitungan fisik dengan angka 0 atau lebih.', 'error');
+            if ($v !== '' && $v !== null && (! is_numeric($v) || $v < 0 || $v > 1_000_000)) {
+                $this->toast('Isi hitungan fisik dengan angka 0 sampai 1.000.000.', 'error');
 
                 return;
             }

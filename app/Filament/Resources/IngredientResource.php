@@ -66,7 +66,7 @@ class IngredientResource extends Resource
             Notification::make()->title('Stok diperbarui')->success()->send();
         };
         $form = fn (string $label) => [
-            Forms\Components\TextInput::make('qty')->label($label)->numeric()->required(),
+            Forms\Components\TextInput::make('qty')->label($label)->numeric()->required()->minValue(0)->maxValue(1_000_000),
             Forms\Components\TextInput::make('note')->label('Catatan'),
         ];
 
@@ -89,7 +89,10 @@ class IngredientResource extends Resource
                 Tables\Actions\Action::make('adjust')->label('Koreksi stok fisik')->icon('heroicon-o-scale')
                     ->form($form('Jumlah fisik sebenarnya'))->action($adjust('adjustment')),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->modalDescription(fn (Ingredient $record) => ($n = \App\Models\Recipe::where('ingredient_id', $record->id)->count())
+                        ? "Bahan ini dipakai di {$n} resep menu. Menghapusnya ikut menghapus bahan ini dari resep tersebut dan seluruh riwayat stoknya."
+                        : 'Riwayat stok bahan ini ikut terhapus.'),
             ]),
         ])->defaultSort('name');
     }

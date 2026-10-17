@@ -17,6 +17,11 @@ use Illuminate\Validation\ValidationException;
 
 class PosService
 {
+    /** Batas wajar input uang (Rp100 juta) — mencegah salah ketik & angka di luar kapasitas kolom database. */
+    public const MAX_MONEY = 100_000_000;
+
+    public const MAX_QTY = 999;
+
     /**
      * Hitung ulang keranjang dari harga di database (harga dari klien tidak dipercaya).
      *
@@ -28,14 +33,23 @@ class PosService
         $lines = [];
         $subtotal = 0;
         foreach ($cart as $row) {
-            $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->findOrFail($row['menu_id']);
-            $variant = ! empty($row['variant_id']) ? MenuVariant::where('menu_id', $menu->id)->findOrFail($row['variant_id']) : null;
+            $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->find($row['menu_id']);
+            if (! $menu) {
+                throw ValidationException::withMessages(['cart' => ($row['name'] ?? 'Menu').' sudah tidak tersedia. Hapus dari pesanan.']);
+            }
+            $variant = ! empty($row['variant_id']) ? MenuVariant::where('menu_id', $menu->id)->find($row['variant_id']) : null;
+            if (! empty($row['variant_id']) && ! $variant) {
+                throw ValidationException::withMessages(['cart' => "Ukuran {$menu->name} sudah tidak tersedia. Hapus dari pesanan."]);
+            }
+            $qty = (int) $row['qty'];
+            if ($qty < 1 || $qty > self::MAX_QTY) {
+                throw ValidationException::withMessages(['cart' => "Jumlah {$menu->name} harus 1–".self::MAX_QTY.'.']);
+            }
             if (! $variant && $menu->variants()->exists()) {
                 throw ValidationException::withMessages(['cart' => "Pilih ukuran untuk {$menu->name}."]);
             }
             $toppings = Topping::whereIn('id', $row['topping_ids'] ?? [])->where('is_active', true)
                 ->where('group', $menu->topping_group)->get();
-            $qty = max(1, (int) $row['qty']);
             $base = $variant?->price ?? $menu->base_price;
             $overridden = isset($row['price_override']) && $row['price_override'] !== null && (int) $row['price_override'] !== $base;
             if ($overridden) {
@@ -87,6 +101,9 @@ class PosService
         }
         if ($manualDiscount > 0 && ! ($approver?->canApprove())) {
             throw ValidationException::withMessages(['pin' => 'Diskon manual butuh PIN owner/manager.']);
+        }
+        if ($paid > self::MAX_MONEY || $manualDiscount > self::MAX_MONEY) {
+            throw ValidationException::withMessages(['paid' => 'Nominal terlalu besar. Periksa lagi angkanya.']);
         }
         if ($method === 'cash' && $channel === 'offline' && $paid < $priced['total']) {
             throw ValidationException::withMessages(['paid' => 'Uang yang dibayar kurang.']);

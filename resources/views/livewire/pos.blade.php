@@ -162,6 +162,9 @@
                             </div>
                             <div class="p-3">
                                 <div class="flex flex-wrap gap-1">
+                                    @if (isset($this->outOfStock[$m->id]))
+                                        <span class="badge bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200" title="Bahan di sistem tidak cukup. Tetap bisa dijual; cek stok fisik.">Stok habis</span>
+                                    @endif
                                     @if (in_array($m->id, $this->best[0]))
                                         <span class="badge bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200">★ Best</span>
                                     @endif

@@ -23,6 +23,27 @@ class ProductionSetupTest extends TestCase
         $this->assertGreaterThan(100, Menu::count());
     }
 
+    public function test_menu_seeder_refuses_to_overwrite_live_data_in_production(): void
+    {
+        $this->seed(\Database\Seeders\DatabaseSeeder::class);
+        $outlet = Outlet::where('name', 'Tembalang')->first();
+        $kasir = User::where('name', 'Elsya')->first();
+        $shift = app(\App\Services\ShiftService::class)->open($kasir, $outlet, 0);
+        $menu = Menu::where('outlet_id', $outlet->id)->where('name', 'Jasmine Tea')->first();
+        app(\App\Services\PosService::class)->checkout($kasir, $shift,
+            [['menu_id' => $menu->id, 'variant_id' => null, 'topping_ids' => [], 'qty' => 1]], 'qris', 'offline', 0);
+
+        // Owner mengubah data lewat web.
+        $menu->update(['base_price' => 6000]);
+        $custom = Menu::create(['outlet_id' => $outlet->id, 'name' => 'Menu Owner', 'category' => 'Baru', 'base_price' => 9000]);
+
+        $this->app['env'] = 'production';
+        app(\Database\Seeders\MenuSeeder::class)->run();
+
+        $this->assertSame(6000, $menu->fresh()->base_price);
+        $this->assertTrue($custom->fresh()->is_active);
+    }
+
     public function test_jp_user_creates_owner_and_cashier(): void
     {
         $this->seed(ProductionSeeder::class);

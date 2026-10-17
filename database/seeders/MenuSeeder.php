@@ -72,6 +72,16 @@ class MenuSeeder extends Seeder
 
     public function run(): void
     {
+        // Pengaman: di server yang sudah berjalan, seeder ini MENIMPA harga, resep, topping, dan menonaktifkan
+        // menu yang dibuat lewat panel admin. Hanya jalan bila diminta secara sadar.
+        if (app()->isProduction() && \App\Models\Transaction::exists() && getenv('MENU_SEEDER_RESET') !== '1') {
+            $this->command?->error('MenuSeeder dibatalkan: server ini sudah berisi transaksi.');
+            $this->command?->line('Seeder akan menimpa harga, resep, & topping, dan menonaktifkan menu yang dibuat lewat panel admin.');
+            $this->command?->line('Kalau memang ingin menyetel ulang semua menu, jalankan dengan -e MENU_SEEDER_RESET=1.');
+
+            return;
+        }
+
         $toppings = $this->toppings();
         foreach ($toppings as $name => [$group, $price, $ing, $qty]) {
             $t = Topping::updateOrCreate(['name' => $name], ['group' => $group, 'price' => $price, 'is_active' => true]);
