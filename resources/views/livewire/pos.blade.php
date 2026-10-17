@@ -127,7 +127,7 @@
     @elseif ($tab === 'kasir')
         {{-- ================= KASIR ================= --}}
         <main class="flex-1 grid lg:grid-cols-[minmax(0,1fr)_400px]">
-            <section class="min-w-0 p-4 lg:p-6 space-y-4">
+            <section class="min-w-0 p-4 lg:p-6 space-y-4 {{ $cart ? 'pb-28 lg:pb-6' : '' }}">
                 <div class="flex flex-col sm:flex-row sm:items-center gap-3">
                     <div class="relative shrink-0 sm:w-56">
                         <svg class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
@@ -191,9 +191,17 @@
                 </div>
             </section>
 
-            {{-- Panel pesanan --}}
-            <aside class="flex flex-col border-t lg:border-t-0 lg:border-l border-slate-200 bg-white lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)]">
+            {{-- Panel pesanan: di layar lebar selalu di kanan; di HP muncul sebagai lembar dari bawah. --}}
+            @if ($cartOpen)
+                <div class="lg:hidden fixed inset-0 z-30 bg-slate-900/50" wire:click="$set('cartOpen', false)" aria-hidden="true"></div>
+            @endif
+            <aside class="{{ $cartOpen ? 'flex fixed inset-x-0 bottom-0 z-40 max-h-[88vh] rounded-t-xl shadow-2xl' : 'hidden' }}
+                          lg:flex lg:sticky lg:top-16 lg:bottom-auto lg:z-auto lg:max-h-none lg:h-[calc(100vh-4rem)] lg:rounded-none lg:shadow-none
+                          flex-col lg:border-l border-slate-200 bg-white">
                 <div class="flex items-center gap-3 px-5 h-14 border-b border-slate-200">
+                    <button type="button" wire:click="$set('cartOpen', false)" class="btn-icon -ml-2 border-0 lg:hidden" aria-label="Tutup pesanan">
+                        <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                    </button>
                     <h2 class="text-sm font-semibold">Pesanan</h2>
                     @if ($cart)
                         <span class="badge bg-indigo-50 text-indigo-700">{{ collect($cart)->sum('qty') }} item</span>
@@ -259,12 +267,28 @@
                     <div class="grid grid-cols-[auto_auto_1fr] gap-2">
                         <button wire:click="askPin('discount')" @disabled(empty($cart)) class="btn btn-secondary">Diskon</button>
                         <button wire:click="clearCart" @disabled(empty($cart)) class="btn btn-secondary">Batal</button>
-                        <button wire:click="openPay" @disabled(empty($cart)) class="btn btn-primary btn-lg h-11 text-base">
-                            Bayar @if($cart)<span class="tabular-nums font-medium opacity-90">· {{ $rp($this->priced['total']) }}</span>@endif
+                        <button wire:click="openPay" @disabled(empty($cart)) class="btn btn-primary btn-lg h-11 text-base whitespace-nowrap">
+                            Bayar @if($cart)<span class="hidden sm:inline tabular-nums font-medium opacity-90">· {{ $rp($this->priced['total']) }}</span>@endif
                         </button>
                     </div>
                 </div>
             </aside>
+
+            {{-- Bar bawah khusus HP: total & tombol Bayar selalu terlihat tanpa scroll. --}}
+            @if ($cart && ! $cartOpen)
+                <div class="lg:hidden fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
+                    <div class="flex items-center gap-2">
+                        <button type="button" wire:click="$set('cartOpen', true)" class="btn btn-secondary h-12 flex-1 justify-between px-3">
+                            <span class="flex items-center gap-2">
+                                <span class="grid size-6 place-items-center rounded-full bg-indigo-600 text-xs font-bold text-white tabular-nums">{{ collect($cart)->sum('qty') }}</span>
+                                <span>Pesanan</span>
+                            </span>
+                            <span class="font-semibold tabular-nums text-slate-900">{{ $rp($this->priced['total']) }}</span>
+                        </button>
+                        <button type="button" wire:click="openPay" class="btn btn-primary h-12 px-6 text-base">Bayar</button>
+                    </div>
+                </div>
+            @endif
         </main>
 
     @elseif ($tab === 'riwayat')

@@ -57,6 +57,9 @@ class Pos extends Component
 
     public bool $showPay = false;
 
+    /** Di HP: panel pesanan dibuka sebagai lembar dari bawah. */
+    public bool $cartOpen = false;
+
     public ?string $lastTrxId = null;
 
     // PIN approval
@@ -253,16 +256,18 @@ class Pos extends Component
         if ($this->cart[$key]['qty'] < 1) {
             unset($this->cart[$key]);
         }
+        $this->cartOpen = $this->cartOpen && ! empty($this->cart);
     }
 
     public function removeLine(string $key): void
     {
         unset($this->cart[$key]);
+        $this->cartOpen = $this->cartOpen && ! empty($this->cart);
     }
 
     public function clearCart(): void
     {
-        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay');
+        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen');
         $this->channel = 'offline';
         $this->method = 'cash';
     }
@@ -363,6 +368,7 @@ class Pos extends Component
             return;
         }
         $this->showPay = true;
+        $this->cartOpen = false;
         $this->paid = null;
     }
 
