@@ -95,6 +95,14 @@ git pull
 docker compose up -d --build
 ```
 
+**Update keamanan PHP** (mis. saat ada pengumuman celah PHP di php.net). PHP aplikasi ada di dalam image Docker,
+jadi `apt upgrade php` di VPS tidak memperbaruinya. Build ulang dengan `--pull` agar image dasar PHP terbaru terunduh:
+
+```bash
+docker compose build --pull app && docker compose up -d
+docker compose exec app php -v
+```
+
 Migrasi database berjalan otomatis. Jangan jalankan `MenuSeeder` lagi di server yang sudah dipakai
 kecuali memang ingin menyetel ulang resep — ubah harga/menu lewat panel admin.
 

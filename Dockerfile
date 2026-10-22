@@ -43,6 +43,10 @@ COPY --chown=www-data:www-data --from=assets /app/public/build ./public/build
 # Gagal saat build (bukan saat jalan) bila versi PHP tidak cocok dengan composer.lock.
 RUN php -r 'require "vendor/autoload.php"; echo "Platform PHP ".PHP_VERSION." OK\n";'
 
+# Tolak PHP yang rentan CVE-2026-109618 / CVE-2026-109619 ("php2shell", RCE). Diperbaiki di 8.4.27.
+# Kalau build gagal di sini: jalankan build dengan --pull agar image dasar PHP terbaru terunduh.
+RUN php -r 'if (version_compare(PHP_VERSION, "8.4.27", "<")) { fwrite(STDERR, "PHP ".PHP_VERSION." rentan CVE-2026-109618/109619. Butuh >= 8.4.27 — build ulang dengan --pull.\n"); exit(1); } echo "PHP ".PHP_VERSION." sudah ditambal\n";'
+
 RUN rm -rf tests .claude node_modules storage/logs/*.log \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs \
         storage/app/public bootstrap/cache \
