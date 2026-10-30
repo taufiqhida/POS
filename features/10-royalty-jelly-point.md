@@ -38,7 +38,7 @@
 ## Ide tambahan (setelah uji coba)
 - Hari stempel ganda jam sepi, hadiah ulang tahun, ajak teman, level member.
 
-## Belum diputuskan
-1. Stempel gabung dua outlet atau dipisah?
-2. Modal rata-rata Es Teh dan Medium?
-3. Uji coba di Grafika dulu atau langsung dua outlet?
+## Keputusan
+1. Stempel digabung untuk dua outlet.
+2. Langsung berlaku di Tembalang dan Grafika, tanpa uji coba satu outlet.
+3. Modal tidak perlu dihitung: hadiah berupa minuman acak dari daftar pilihan owner (menggantikan hadiah tetap di atas; detail per tingkat dikonfirmasi sebelum dikerjakan).
