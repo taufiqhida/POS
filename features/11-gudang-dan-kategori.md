@@ -8,7 +8,7 @@
 ## Stok gudang utama
 - Admin > Stok > Stok Gudang Utama: tiap bahan punya kartu gudang (otomatis dibuat dari bahan outlet; stok awal 0).
 - Barang masuk (dari supplier) menambah stok gudang. Koreksi fisik & catat rusak/terbuang tersedia.
-- Outlet mengambil bahan dari gudang: stok gudang berkurang, stok outlet bertambah. Bisa dari layar kasir (tab Stok > Ambil dari gudang) atau dikirim owner dari panel admin.
+- Outlet mengambil bahan dari gudang: stok gudang berkurang, stok outlet bertambah. HANYA owner & manager (kasir tidak boleh): lewat panel admin atau tab Stok > Ambil dari gudang di layar kasir saat login sebagai manager/owner.
 - Ditolak bila melebihi stok gudang; satuan harus sama; dicatat atas nama pegawai di Riwayat Gudang & riwayat stok outlet.
 - Pencocokan bahan gudang <-> outlet lewat NAMA bahan.
 

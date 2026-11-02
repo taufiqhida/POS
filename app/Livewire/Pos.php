@@ -578,6 +578,11 @@ class Pos extends Component
 
     public function openTake(?string $itemId = null): void
     {
+        if (! Auth::user()->canApprove()) {
+            $this->toast('Pengambilan dari gudang hanya untuk owner atau manager.', 'error');
+
+            return;
+        }
         $this->reset('takeQty', 'takeNote');
         $this->takeItemId = $itemId;
         $this->takeOpen = true;
@@ -586,6 +591,7 @@ class Pos extends Component
 
     public function submitTake(\App\Services\WarehouseService $wh): void
     {
+        abort_unless(Auth::user()->canApprove(), 403);
         $this->validate([
             'takeItemId' => 'required|exists:warehouse_items,id',
             'takeQty' => 'required|numeric|gt:0|max:'.\App\Services\WarehouseService::MAX_QTY,

@@ -467,7 +467,9 @@
                             <p class="text-xs text-slate-500">Hitung semua bahan. <b>Kosongkan</b> kalau jumlahnya sama dengan sistem — cukup ketik yang berbeda.</p>
                         </div>
                         <div class="ml-auto flex gap-2">
-                            <button type="button" wire:click="openTake()" class="btn btn-secondary btn-sm">Ambil dari gudang</button>
+                            @if (auth()->user()->canApprove())
+                                <button type="button" wire:click="openTake()" class="btn btn-secondary btn-sm">Ambil dari gudang</button>
+                            @endif
                             <button class="btn btn-primary btn-sm">Simpan cek stok</button>
                         </div>
                     </div>

@@ -119,7 +119,7 @@ class WarehouseCategoryTest extends TestCase
     {
         $wh = app(WarehouseService::class);
         $outlet = $this->outlet();
-        $kasir = User::where('name', 'Elsya')->first();
+        $kasir = User::where('role', 'manager')->first();
         $item = WarehouseItem::where('name', 'Boba')->first();
         $ing = Ingredient::where('outlet_id', $outlet->id)->where('name', 'Boba')->first();
         $before = $ing->stock_current;
@@ -183,7 +183,26 @@ class WarehouseCategoryTest extends TestCase
         app(WarehouseService::class)->transfer($item, $this->outlet(), 5, $this->owner());
     }
 
-    public function test_cashier_takes_from_warehouse_on_stock_tab(): void
+    public function test_manager_takes_from_warehouse_on_stock_tab(): void
+    {
+        $outlet = $this->outlet();
+        $manager = User::where('role', 'manager')->first();
+        app(ShiftService::class)->open($manager, $outlet, 0);
+        $this->actingAs($manager)->withSession(['pos_outlet_id' => $outlet->id]);
+        $item = WarehouseItem::where('name', 'Boba')->first();
+        $item->update(['stock_current' => 40]);
+
+        Livewire::test(Pos::class)->set('tab', 'stok')
+            ->assertSee('Ambil dari gudang')
+            ->call('openTake', $item->id)
+            ->set('takeQty', '999')->call('submitTake')->assertHasErrors('takeQty')   // melebihi stok gudang
+            ->set('takeQty', '12')->call('submitTake')->assertHasNoErrors()->assertSet('takeOpen', false);
+
+        $this->assertEquals(28, $item->fresh()->stock_current);
+        $this->assertSame($manager->id, WarehouseMovement::first()->user_id);
+    }
+
+    public function test_cashier_cannot_take_from_warehouse(): void
     {
         $outlet = $this->outlet();
         $kasir = User::where('name', 'Elsya')->first();
@@ -191,15 +210,30 @@ class WarehouseCategoryTest extends TestCase
         $this->actingAs($kasir)->withSession(['pos_outlet_id' => $outlet->id]);
         $item = WarehouseItem::where('name', 'Boba')->first();
         $item->update(['stock_current' => 40]);
+        $ing = Ingredient::where('outlet_id', $outlet->id)->where('name', 'Boba')->first();
+        $before = $ing->stock_current;
 
-        Livewire::test(Pos::class)->set('tab', 'stok')
-            ->call('openTake', $item->id)->assertSee('Ambil dari gudang')
-            ->set('takeQty', '999')->call('submitTake')->assertHasErrors('takeQty')   // melebihi stok gudang
-            ->set('takeQty', '12')->call('submitTake')->assertHasNoErrors()->assertSet('takeOpen', false);
+        // 1) Tombol tidak tampil, 2) membuka form ditolak, 3) kirim langsung ditolak server.
+        $lw = Livewire::test(Pos::class)->set('tab', 'stok')->assertDontSee('Ambil dari gudang');
+        $lw->call('openTake', $item->id)->assertSet('takeOpen', false)->assertDispatched('toast');
+        $lw->set('takeItemId', $item->id)->set('takeQty', '5')->call('submitTake')->assertForbidden();
 
-        $this->assertEquals(28, $item->fresh()->stock_current);
-        $this->assertSame(1, WarehouseMovement::where('reason', 'transfer')->count());
-        $this->assertSame($kasir->id, WarehouseMovement::first()->user_id);
+        // 4) Bahkan lewat service, kasir tidak boleh (receive, adjust, transfer).
+        foreach ([
+            fn () => app(WarehouseService::class)->transfer($item, $outlet, 5, $kasir),
+            fn () => app(WarehouseService::class)->receive($item, 5, $kasir),
+            fn () => app(WarehouseService::class)->adjust($item, 99, $kasir),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Kasir tidak boleh mengubah stok gudang');
+            } catch (ValidationException $e) {
+                $this->assertStringContainsString('owner atau manager', $e->validator->errors()->first());
+            }
+        }
+        $this->assertEquals(40, $item->fresh()->stock_current);
+        $this->assertEquals($before, $ing->fresh()->stock_current);
+        $this->assertSame(0, WarehouseMovement::count());
     }
 
     public function test_admin_can_receive_and_send_via_panel_and_pages_render(): void

@@ -18,6 +18,7 @@ class WarehouseService
     /** Barang masuk ke gudang (pembelian / restock dari supplier). */
     public function receive(WarehouseItem $item, float $qty, User $user, ?string $note = null): WarehouseItem
     {
+        $this->authorize($user);
         $qty = $this->checkQty($qty);
 
         return DB::transaction(function () use ($item, $qty, $user, $note) {
@@ -32,6 +33,7 @@ class WarehouseService
     /** Koreksi gudang ke jumlah fisik sebenarnya, atau catat barang rusak/terbuang. */
     public function adjust(WarehouseItem $item, float $physical, User $user, ?string $note = null, bool $asWaste = false): WarehouseItem
     {
+        $this->authorize($user);
         if ($physical < 0 || $physical > self::MAX_QTY) {
             throw ValidationException::withMessages(['qty' => 'Jumlah harus 0 sampai '.number_format(self::MAX_QTY, 0, ',', '.').'.']);
         }
@@ -54,6 +56,7 @@ class WarehouseService
      */
     public function transfer(WarehouseItem $item, Outlet $outlet, float $qty, User $user, ?string $note = null): Ingredient
     {
+        $this->authorize($user);
         $qty = $this->checkQty($qty);
 
         return DB::transaction(function () use ($item, $outlet, $qty, $user, $note) {
@@ -79,6 +82,14 @@ class WarehouseService
 
             return $ingredient->refresh();
         });
+    }
+
+    /** Gudang utama hanya boleh dikelola owner & manager — kasir tidak boleh mengambil/mengubah stok gudang. */
+    private function authorize(User $user): void
+    {
+        if (! $user->canApprove()) {
+            throw ValidationException::withMessages(['qty' => 'Hanya owner atau manager yang boleh mengambil atau mengubah stok gudang.']);
+        }
     }
 
     private function checkQty(float $qty): float
