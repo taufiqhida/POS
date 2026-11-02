@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Models\AuditLog;
+use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\Ingredient;
 use App\Models\Menu;
@@ -22,6 +23,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 #[Layout('layouts.pos')]
@@ -191,7 +193,7 @@ class Pos extends Component
             return $empty;
         }
 
-        return app(PosService::class)->price($this->outletId, array_values($this->cart), $this->manualDiscount);
+        return app(PosService::class)->price($this->outletId, array_values($this->cart), $this->manualDiscount, $this->customer);
     }
 
     /**
@@ -219,6 +221,13 @@ class Pos extends Component
         if ($removed) {
             $this->afterCartShrink();
             $this->toast(implode(', ', $removed).' sudah tidak tersedia dan dikeluarkan dari pesanan.', 'error');
+        }
+
+        // Hadiah Jelly Point hanya sah selama member terpilih & capnya cukup.
+        if (collect($this->cart)->contains(fn ($l) => ! empty($l['reward'])) && ! $this->customer?->canRedeem()) {
+            $this->cart = array_filter($this->cart, fn ($l) => empty($l['reward']));
+            $this->afterCartShrink();
+            $this->toast('Hadiah Jelly Point dibatalkan: cap member tidak cukup.', 'error');
         }
 
         // Item gratis promo yang sudah tidak berhak (item pemicu dikurangi / promo dimatikan) ikut dikeluarkan.
@@ -279,6 +288,135 @@ class Pos extends Component
             return;   // masih ada jatah gratis, biarkan daftar pilihan terbuka
         }
         $this->freePromoId = null;
+    }
+
+    // ---------- Member Jelly Point ----------
+
+    #[Locked]
+    public ?string $customerId = null;
+
+    public string $memberPhone = '';
+
+    public string $memberName = '';
+
+    public string $memberPin = '';
+
+    public bool $memberConsent = true;
+
+    /** Nomor belum terdaftar: tampilkan form daftar. */
+    public bool $memberRegister = false;
+
+    public bool $rewardOpen = false;
+
+    public string $rewardPin = '';
+
+    #[Computed]
+    public function customer(): ?Customer
+    {
+        return $this->customerId ? Customer::find($this->customerId)?->expireIfStale() : null;
+    }
+
+    public function findMember(): void
+    {
+        $this->resetErrorBag();
+        $phone = Customer::normalizePhone($this->memberPhone);
+        if (! $phone) {
+            $this->addError('memberPhone', 'Nomor HP tidak valid. Contoh: 081234567890.');
+
+            return;
+        }
+        $this->memberPhone = $phone;
+        $found = Customer::where('phone', $phone)->first();
+        $this->customerId = $found?->id;
+        $this->memberRegister = ! $found;
+        unset($this->customer, $this->priced);
+    }
+
+    public function registerMember(): void
+    {
+        $this->resetErrorBag();
+        $this->validate([
+            'memberName' => 'required|string|max:60',
+            'memberPin' => 'required|digits:4',
+        ], [], ['memberName' => 'nama', 'memberPin' => 'PIN']);
+        $phone = Customer::normalizePhone($this->memberPhone);
+        if (! $phone || Customer::where('phone', $phone)->exists()) {
+            $this->addError('memberPhone', 'Nomor HP tidak valid atau sudah terdaftar.');
+
+            return;
+        }
+        $c = Customer::create(['phone' => $phone, 'name' => trim($this->memberName), 'pin' => $this->memberPin,
+            'can_contact' => $this->memberConsent]);
+        $this->customerId = $c->id;
+        $this->reset('memberRegister', 'memberName', 'memberPin');
+        unset($this->customer);
+        $this->toast("Member {$c->name} terdaftar.");
+    }
+
+    public function clearMember(): void
+    {
+        foreach ($this->cart as $k => $line) {
+            if (! empty($line['reward'])) {
+                unset($this->cart[$k]);
+            }
+        }
+        $this->reset('customerId', 'memberPhone', 'memberName', 'memberPin', 'memberRegister', 'rewardOpen', 'rewardPin');
+        $this->memberConsent = true;
+        $this->afterCartShrink();
+        unset($this->customer, $this->priced);
+    }
+
+    public function openReward(): void
+    {
+        $c = $this->customer;
+        if (! $c || ! $c->canRedeem()) {
+            $this->toast('Cap belum cukup untuk menukar hadiah.', 'error');
+
+            return;
+        }
+        if (collect($this->cart)->contains(fn ($l) => ! empty($l['reward']))) {
+            $this->toast('Hadiah sudah ada di pesanan.', 'error');
+
+            return;
+        }
+        $this->reset('rewardPin');
+        $this->resetErrorBag();
+        $this->rewardOpen = true;
+    }
+
+    /** Pelanggan mengetik PIN-nya sendiri, lalu sistem mengundi minuman hadiah dari daftar pilihan owner. */
+    public function redeemReward(): void
+    {
+        $this->resetErrorBag();
+        $c = $this->customer;
+        if (! $c || ! $c->canRedeem()) {
+            $this->rewardOpen = false;
+
+            return;
+        }
+        if (! $c->checkPin($this->rewardPin)) {
+            $this->addError('rewardPin', $c->fresh()->isLocked()
+                ? 'PIN terkunci karena salah 5×. Minta owner/manager mereset.' : 'PIN salah.');
+            $this->rewardPin = '';
+
+            return;
+        }
+        $menu = Menu::with('variants')->where('outlet_id', $this->outletId)->where('is_active', true)->where('is_reward', true)
+            ->inRandomOrder()->first();
+        if (! $menu) {
+            $this->addError('rewardPin', 'Belum ada menu hadiah di outlet ini. Owner perlu menandai menu 🎁 di Admin › Menu.');
+
+            return;
+        }
+        $variant = $menu->variants->first(fn ($v) => in_array($v->size, ['Reguler', 'Regular'])) ?? $menu->variants->first();
+        $this->cart[(string) Str::uuid()] = [
+            'sig' => 'reward|'.$menu->id, 'menu_id' => $menu->id, 'variant_id' => $variant?->id, 'topping_ids' => [], 'qty' => 1,
+            'price_override' => null, 'name' => $menu->name, 'size' => $variant?->size, 'topping_names' => '',
+            'promo_id' => null, 'reward' => true,
+        ];
+        $this->reset('rewardOpen', 'rewardPin');
+        unset($this->priced);
+        $this->toast("🎁 Hadiah: {$menu->name}");
     }
 
     /** Pesanan kosong = pelanggan baru: diskon manual & persetujuan PIN tidak boleh terbawa. */
@@ -387,7 +525,7 @@ class Pos extends Component
     public function qty(string $key, int $delta): void
     {
         // Jumlah item gratis diatur oleh promo; kasir hanya bisa menghapusnya.
-        if (! isset($this->cart[$key]) || ! empty($this->cart[$key]['promo_id'])) {
+        if (! isset($this->cart[$key]) || (! empty($this->cart[$key]['promo_id']) || ! empty($this->cart[$key]['reward']))) {
             return;
         }
         $this->cart[$key]['qty'] += $delta;
@@ -405,7 +543,10 @@ class Pos extends Component
 
     public function clearCart(): void
     {
-        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen', 'freePromoId');
+        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen', 'freePromoId',
+            'customerId', 'memberPhone', 'memberName', 'memberPin', 'memberRegister', 'rewardOpen', 'rewardPin');
+        $this->memberConsent = true;
+        unset($this->customer);
         $this->channel = 'offline';
         $this->method = 'cash';
     }
@@ -515,7 +656,7 @@ class Pos extends Component
         $approver = $this->approverId ? User::find($this->approverId) : null;
         try {
             $trx = $pos->checkout(Auth::user(), $this->requireShift(), array_values($this->cart), $this->method, $this->channel,
-                (int) $this->paid, $this->manualDiscount, $approver);
+                (int) $this->paid, $this->manualDiscount, $approver, $this->customer);
         } catch (ValidationException $e) {
             $this->setErrorBag($e->validator->errors());
 

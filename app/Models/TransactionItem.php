@@ -11,7 +11,7 @@ class TransactionItem extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['transaction_id', 'menu_id', 'variant_id', 'menu_name', 'size', 'qty', 'price_each', 'subtotal', 'promo_name'];
+    protected $fillable = ['transaction_id', 'menu_id', 'variant_id', 'menu_name', 'size', 'qty', 'price_each', 'subtotal', 'promo_name', 'is_reward'];
 
     public function transaction(): BelongsTo
     {

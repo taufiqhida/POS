@@ -48,6 +48,10 @@ class MenuResource extends Resource
                 Forms\Components\TextInput::make('free_toppings')->label('Topping gratis per cup')->numeric()->minValue(0)->maxValue(5)->default(0)
                     ->helperText('Mis. 1 = "harga sudah termasuk free 1 topping".'),
                 Forms\Components\Toggle::make('is_active')->label('Tersedia')->default(true),
+                Forms\Components\TextInput::make('stamps')->label('Cap Jelly Point per item')->numeric()->minValue(0)->maxValue(20)->default(1)
+                    ->helperText('Topping tidak menambah cap. 0 = menu ini tidak memberi cap.'),
+                Forms\Components\Toggle::make('is_reward')->label('🎁 Masuk daftar hadiah acak')
+                    ->helperText('Saat member menukar cap, minuman gratis diundi acak dari menu bertanda ini (per outlet).'),
                 Forms\Components\Toggle::make('is_best')->label('⭐ Best menu')
                     ->helperText('Tampil di tab Best layar kasir. Bila tidak ada yang ditandai di outlet ini, tab Best otomatis berisi menu terlaris 30 hari terakhir.'),
                 Forms\Components\FileUpload::make('image')->label('Foto produk (opsional)')->image()->imageEditor()
@@ -99,6 +103,8 @@ class MenuResource extends Resource
                 ->color(fn ($state) => $state ? null : 'danger'),
             Tables\Columns\ToggleColumn::make('is_active')->label('Tersedia'),
             Tables\Columns\ToggleColumn::make('is_best')->label('⭐ Best')->sortable(),
+            Tables\Columns\TextColumn::make('stamps')->label('Cap'),
+            Tables\Columns\ToggleColumn::make('is_reward')->label('🎁 Hadiah'),
         ])->filters([
             Tables\Filters\SelectFilter::make('outlet_id')->relationship('outlet', 'name')->label('Outlet'),
             Tables\Filters\TernaryFilter::make('is_best')->label('Best menu'),
@@ -110,7 +116,7 @@ class MenuResource extends Resource
                 ->action(function (Menu $record, array $data) {
                     // Salin hanya kolom menu (bukan kolom hitungan tabel seperti recipes_count). Tanda Best tidak ikut.
                     $copy = Menu::create(['outlet_id' => $data['outlet_id'], 'is_best' => false]
-                        + $record->only(['name', 'category', 'image', 'base_price', 'free_toppings', 'topping_group', 'is_active']));
+                        + $record->only(['name', 'category', 'image', 'base_price', 'free_toppings', 'stamps', 'topping_group', 'is_active']));
                     $map = [];
                     foreach ($record->variants as $v) {
                         $map[$v->id] = $copy->variants()->create($v->only('size', 'price'))->id;

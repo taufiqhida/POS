@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\Customer;
+use App\Models\StampLog;
 use App\Models\Ingredient;
 use App\Models\Menu;
 use App\Models\MenuVariant;
@@ -29,12 +31,15 @@ class PosService
      * Baris dengan promo_id = item gratis dari promo "beli X gratis Y"; hanya sah sebanyak yang sudah didapat.
      * $manualDiscount: diskon manual (butuh approver).
      */
-    public function price(string $outletId, array $cart, int $manualDiscount = 0): array
+    public function price(string $outletId, array $cart, int $manualDiscount = 0, ?Customer $customer = null): array
     {
         $built = [];
         $free = [];
+        $rewards = 0;
         foreach ($cart as $i => $row) {
-            if (! empty($row['promo_id'])) {
+            if (! empty($row['reward'])) {
+                $built[$i] = $this->buildRewardLine($outletId, $row, $customer, ++$rewards);
+            } elseif (! empty($row['promo_id'])) {
                 $free[$i] = $row;
             } else {
                 $built[$i] = $this->buildLine($outletId, $row);
@@ -42,7 +47,8 @@ class PosService
         }
 
         // Hadiah hanya dihitung dari item biasa (item gratis tidak ikut memicu promo).
-        $earned = $this->earned(Promo::freeItemPromos($outletId), array_map(fn ($l) => ['menu' => $l['menu'], 'qty' => $l['qty']], $built));
+        $earned = $this->earned(Promo::freeItemPromos($outletId), array_map(fn ($l) => ['menu' => $l['menu'], 'qty' => $l['qty']],
+            array_filter($built, fn ($l) => ! $l['is_reward'])));
         $used = [];
         foreach ($free as $i => $row) {
             $built[$i] = $this->buildFreeLine($outletId, $row, $earned, $used);
@@ -102,7 +108,21 @@ class PosService
 
         return ['menu' => $menu, 'variant' => $variant, 'toppings' => $toppings, 'qty' => $qty, 'each' => $each,
             'lineTotal' => $lineTotal, 'overridden' => $overridden, 'base' => $base, 'freeIds' => $freeIds,
-            'promo_name' => null, 'listPrice' => null];
+            'promo_name' => null, 'listPrice' => null, 'is_reward' => false];
+    }
+
+    /** Minuman hadiah Jelly Point: Rp0, hanya 1 per pesanan, hanya untuk member yang capnya cukup dan menu bertanda hadiah. */
+    private function buildRewardLine(string $outletId, array $row, ?Customer $customer, int $nth): array
+    {
+        $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->where('is_reward', true)->find($row['menu_id']);
+        if (! $customer || ! $menu || $nth > 1 || ! $customer->canRedeem()) {
+            throw ValidationException::withMessages(['cart' => 'Hadiah Jelly Point tidak berlaku. Hapus hadiah dari pesanan.']);
+        }
+        $variant = $menu->variants->first(fn ($v) => in_array($v->size, ['Reguler', 'Regular'])) ?? $menu->variants->first();
+
+        return ['menu' => $menu, 'variant' => $variant, 'toppings' => collect(), 'qty' => 1, 'each' => 0, 'lineTotal' => 0,
+            'overridden' => false, 'base' => 0, 'freeIds' => [], 'promo_name' => 'Hadiah Jelly Point',
+            'listPrice' => $variant?->price ?? $menu->base_price, 'is_reward' => true];
     }
 
     /** Baris item gratis dari promo: harga Rp0, tanpa topping, dan tidak boleh melebihi yang sudah didapat. */
@@ -125,7 +145,7 @@ class PosService
 
         return ['menu' => $menu, 'variant' => $variant, 'toppings' => collect(), 'qty' => $qty, 'each' => 0, 'lineTotal' => 0,
             'overridden' => false, 'base' => 0, 'freeIds' => [], 'promo_name' => $promo->name,
-            'listPrice' => $variant?->price ?? $menu->base_price];
+            'listPrice' => $variant?->price ?? $menu->base_price, 'is_reward' => false];
     }
 
     /**
@@ -169,7 +189,7 @@ class PosService
         foreach ($cart as $row) {
             if (! empty($row['promo_id'])) {
                 $used[$row['promo_id']] = ($used[$row['promo_id']] ?? 0) + (int) $row['qty'];
-            } elseif ($m = $byId[$row['menu_id']] ?? null) {
+            } elseif (empty($row['reward']) && ($m = $byId[$row['menu_id']] ?? null)) {
                 $items[] = ['menu' => $m, 'qty' => (int) $row['qty']];
             }
         }
@@ -201,7 +221,7 @@ class PosService
         $menus = Menu::where('outlet_id', $outletId)->whereIn('id', array_column($cart, 'menu_id'))->get()->keyBy('id');
         $items = [];
         foreach ($cart as $row) {
-            if (empty($row['promo_id']) && isset($menus[$row['menu_id']])) {
+            if (empty($row['promo_id']) && empty($row['reward']) && isset($menus[$row['menu_id']])) {
                 $items[] = ['menu' => $menus[$row['menu_id']], 'qty' => (int) $row['qty']];
             }
         }
@@ -232,7 +252,7 @@ class PosService
         return [$cart, $removed];
     }
 
-    public function checkout(User $cashier, Shift $shift, array $cart, string $method, string $channel, int $paid, int $manualDiscount = 0, ?User $approver = null): Transaction
+    public function checkout(User $cashier, Shift $shift, array $cart, string $method, string $channel, int $paid, int $manualDiscount = 0, ?User $approver = null, ?Customer $customer = null): Transaction
     {
         if ($shift->status !== 'open') {
             throw ValidationException::withMessages(['shift' => 'Shift belum dibuka.']);
@@ -244,7 +264,8 @@ class PosService
             throw ValidationException::withMessages(['payment' => 'Metode bayar / kanal tidak valid.']);
         }
 
-        $priced = $this->price($shift->outlet_id, $cart, $manualDiscount);
+        $customer = $customer?->fresh()?->expireIfStale();
+        $priced = $this->price($shift->outlet_id, $cart, $manualDiscount, $customer);
         $hasOverride = collect($priced['lines'])->contains('overridden', true);
 
         if ($hasOverride && ! ($approver?->canChangePrice())) {
@@ -263,8 +284,12 @@ class PosService
             $paid = $priced['total'];
         }
 
-        return DB::transaction(function () use ($cashier, $shift, $priced, $method, $channel, $paid, $approver, $hasOverride, $manualDiscount) {
+        return DB::transaction(function () use ($cashier, $shift, $priced, $method, $channel, $paid, $approver, $hasOverride, $manualDiscount, $customer) {
+            $stamps = $this->stampsFor($priced['lines'], $channel, $customer);
             $trx = Transaction::create([
+                'customer_id' => $customer?->id,
+                'stamps_earned' => $stamps['earned'],
+                'stamps_used' => $stamps['used'],
                 'number' => $this->nextNumber($shift->outlet_id),
                 'outlet_id' => $shift->outlet_id,
                 'shift_id' => $shift->id,
@@ -290,6 +315,7 @@ class PosService
                     'price_each' => $l['each'],
                     'subtotal' => $l['lineTotal'],
                     'promo_name' => $l['promo_name'],
+                    'is_reward' => $l['is_reward'],
                 ]);
                 foreach ($l['toppings'] as $t) {
                     $free = in_array($t->id, $l['freeIds']);
@@ -308,9 +334,72 @@ class PosService
             }
 
             $this->applyStock($trx, -1, 'sale', $cashier->id);
+            $this->applyStamps($trx, $customer, $cashier->id);
 
             return $trx;
         });
+    }
+
+    /**
+     * Cap yang didapat & dipakai transaksi ini. Pesanan online (GoFood dsb), karyawan, item gratis/hadiah tidak dapat cap.
+     *
+     * @return array{earned: int, used: int}
+     */
+    private function stampsFor(array $lines, string $channel, ?Customer $customer): array
+    {
+        if (! $customer) {
+            return ['earned' => 0, 'used' => 0];
+        }
+        $used = collect($lines)->contains('is_reward', true) ? Customer::perReward() : 0;
+        $earned = 0;
+        if ($channel === 'offline' && ! $customer->is_staff) {
+            foreach ($lines as $l) {
+                if (! $l['is_reward'] && ! $l['promo_name']) {
+                    $earned += $l['menu']->stamps * $l['qty'];
+                }
+            }
+        }
+
+        return ['earned' => $earned, 'used' => $used];
+    }
+
+    /** Terapkan cap ke saldo member (dikunci agar dua kasir tidak menukar cap yang sama). */
+    private function applyStamps(Transaction $trx, ?Customer $customer, string $userId): void
+    {
+        if (! $customer) {
+            return;
+        }
+        $c = Customer::lockForUpdate()->findOrFail($customer->id);
+        if ($trx->stamps_used > $c->stamps) {
+            throw ValidationException::withMessages(['cart' => 'Cap member tidak cukup untuk menukar hadiah.']);
+        }
+        $net = $trx->stamps_earned - $trx->stamps_used;
+        $c->update(['stamps' => $c->stamps + $net, 'stamps_lifetime' => $c->stamps_lifetime + $trx->stamps_earned,
+            'visits' => $c->visits + 1, 'last_visit_at' => now()]);
+        if ($trx->stamps_used) {
+            StampLog::create(['customer_id' => $c->id, 'transaction_id' => $trx->id, 'change' => -$trx->stamps_used,
+                'reason' => 'redeem', 'user_id' => $userId, 'note' => $trx->number]);
+        }
+        if ($trx->stamps_earned) {
+            StampLog::create(['customer_id' => $c->id, 'transaction_id' => $trx->id, 'change' => $trx->stamps_earned,
+                'reason' => 'earn', 'user_id' => $userId, 'note' => $trx->number]);
+        }
+    }
+
+    /** Void/refund disetujui: cap yang didapat ditarik lagi, cap yang dipakai untuk hadiah dikembalikan. */
+    private function reverseStamps(Transaction $trx, string $userId): void
+    {
+        if (! $trx->customer_id || (! $trx->stamps_earned && ! $trx->stamps_used)) {
+            return;
+        }
+        $c = Customer::lockForUpdate()->find($trx->customer_id);
+        if (! $c) {
+            return;
+        }
+        $change = $trx->stamps_used - $trx->stamps_earned;
+        $c->update(['stamps' => max(0, $c->stamps + $change), 'stamps_lifetime' => max(0, $c->stamps_lifetime - $trx->stamps_earned)]);
+        StampLog::create(['customer_id' => $c->id, 'transaction_id' => $trx->id, 'change' => $change, 'reason' => 'reverse',
+            'user_id' => $userId, 'note' => $trx->number]);
     }
 
     /** Kasir mengajukan void/refund. Transaksi tetap dihitung sampai disetujui owner/manager. */
@@ -372,6 +461,7 @@ class PosService
         return DB::transaction(function () use ($trx, $actor, $approver, $type, $reason) {
             $trx->update(['status' => $type === 'refund' ? 'refunded' : 'void']);
             $this->applyStock($trx, 1, 'void', $actor->id);
+            $this->reverseStamps($trx, $approver->id);
             AuditLog::record($type, $actor->id, 'transaction', $trx->id, "{$trx->number}: {$reason}", $approver->id);
 
             return $trx;

@@ -19,7 +19,7 @@ class Transaction extends Model
 
     protected $fillable = ['number', 'outlet_id', 'shift_id', 'cashier_id', 'payment_method', 'channel', 'subtotal',
         'discount', 'discount_label', 'total', 'paid_amount', 'change_amount', 'status',
-        'cancel_request', 'cancel_reason', 'cancel_requested_by', 'cancel_requested_at'];
+        'customer_id', 'stamps_earned', 'stamps_used', 'cancel_request', 'cancel_reason', 'cancel_requested_by', 'cancel_requested_at'];
 
     protected $casts = ['cancel_requested_at' => 'datetime'];
 
@@ -31,6 +31,11 @@ class Transaction extends Model
     public function isPendingCancel(): bool
     {
         return $this->status === 'paid' && $this->cancel_request !== null;
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     public function outlet(): BelongsTo

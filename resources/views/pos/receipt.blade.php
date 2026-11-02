@@ -37,6 +37,11 @@
     <div class="row b" style="font-size:15px"><span>TOTAL</span><span>{{ $rp($trx->total) }}</span></div>
     <div class="row"><span>{{ \App\Models\Transaction::METHODS[$trx->payment_method] }}</span><span>{{ $rp($trx->paid_amount) }}</span></div>
     @if ($trx->change_amount) <div class="row"><span>Kembali</span><span>{{ $rp($trx->change_amount) }}</span></div> @endif
+    @if ($trx->customer)
+        <hr>
+        <div class="c s">Member: {{ $trx->customer->name }}</div>
+        <div class="c s">@if ($trx->stamps_earned) +{{ $trx->stamps_earned }} cap @endif @if ($trx->stamps_used) · {{ $trx->stamps_used }} cap ditukar hadiah @endif · saldo {{ $trx->customer->stamps }}/{{ \App\Models\Customer::perReward() }}</div>
+    @endif
     <hr>
     <div class="c s">{{ $footer }}</div>
 </div>

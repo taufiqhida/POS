@@ -227,7 +227,7 @@
                                     <div class="mt-0.5 text-xs text-slate-500">
                                         {{ $line['size'] }}@if($line['topping_names']) · {{ $line['topping_names'] }}@endif
                                     </div>
-                                    @if (! empty($line['promo_id']))
+                                    @if ((! empty($line['promo_id']) || ! empty($line['reward'])))
                                         <div class="mt-1"><span class="badge bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">🎁 GRATIS · {{ $p['promo_name'] ?? 'Promo' }}</span></div>
                                     @else
                                         <div class="mt-0.5 text-xs tabular-nums text-slate-500">
@@ -236,7 +236,7 @@
                                         </div>
                                     @endif
                                 </div>
-                                @if (! empty($line['promo_id']))
+                                @if ((! empty($line['promo_id']) || ! empty($line['reward'])))
                                     <div class="text-right text-sm tabular-nums">
                                         <div class="font-semibold text-emerald-700">Gratis</div>
                                         <div class="text-xs text-slate-400 line-through">{{ $rp(($p['listPrice'] ?? 0) * $line['qty']) }}</div>
@@ -246,7 +246,7 @@
                                 @endif
                             </div>
                             <div class="mt-3 flex items-center gap-2">
-                                @if (! empty($line['promo_id']))
+                                @if ((! empty($line['promo_id']) || ! empty($line['reward'])))
                                     <span class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold tabular-nums text-slate-600">{{ $line['qty'] }}×</span>
                                 @else
                                     <div class="inline-flex items-center rounded-lg border border-slate-300">
@@ -256,7 +256,7 @@
                                     </div>
                                     <button wire:click="askPin('price', {key: '{{ $key }}'})" class="btn btn-ghost btn-sm ml-auto">Ubah harga</button>
                                 @endif
-                                <button wire:click="removeLine('{{ $key }}')" class="btn btn-ghost btn-sm {{ ! empty($line['promo_id']) ? 'ml-auto ' : '' }}text-rose-600 hover:bg-rose-50 hover:text-rose-700">Hapus</button>
+                                <button wire:click="removeLine('{{ $key }}')" class="btn btn-ghost btn-sm {{ (! empty($line['promo_id']) || ! empty($line['reward'])) ? 'ml-auto ' : '' }}text-rose-600 hover:bg-rose-50 hover:text-rose-700">Hapus</button>
                             </div>
                         </div>
                     @empty
@@ -609,6 +609,48 @@
                         <div class="text-xs font-medium text-slate-500">Total tagihan</div>
                         <div class="mt-1 text-3xl font-bold tabular-nums tracking-tight">{{ $rp($total) }}</div>
                     </div>
+                    {{-- Member Jelly Point --}}
+                    @php($mc = $this->customer)
+                    <div class="rounded-lg ring-1 ring-inset ring-slate-200 px-4 py-3">
+                        @if ($mc)
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-sm font-semibold">{{ $mc->name }} <span class="font-normal text-slate-500 tabular-nums">· {{ $mc->phone }}</span></div>
+                                    @if ($mc->is_staff)
+                                        <div class="text-xs text-slate-500">Karyawan — tidak mendapat cap.</div>
+                                    @else
+                                        <div class="text-xs text-slate-600">Cap: <b class="tabular-nums">{{ $mc->stamps }}</b> / {{ \App\Models\Customer::perReward() }}</div>
+                                    @endif
+                                </div>
+                                <button type="button" wire:click="clearMember" class="btn btn-ghost btn-sm text-slate-500">Ganti</button>
+                            </div>
+                            @if ($mc->canRedeem())
+                                @if (collect($cart)->contains(fn ($l) => ! empty($l['reward'])))
+                                    <p class="mt-2 text-xs font-medium text-emerald-700">🎁 Hadiah sudah masuk pesanan ({{ \App\Models\Customer::perReward() }} cap akan terpakai).</p>
+                                @else
+                                    <button type="button" wire:click="openReward" class="btn btn-secondary mt-2 w-full">🎁 Tukar {{ \App\Models\Customer::perReward() }} cap → minuman gratis</button>
+                                @endif
+                            @endif
+                        @else
+                            <label class="label" for="memberPhone">No. HP member <span class="font-normal text-slate-400">(opsional — tanya pelanggan)</span></label>
+                            <div class="flex gap-2">
+                                <input id="memberPhone" type="tel" inputmode="tel" wire:model="memberPhone" wire:keydown.enter="findMember" placeholder="08xxxxxxxxxx" class="input h-11 flex-1 tabular-nums">
+                                <button type="button" wire:click="findMember" class="btn btn-secondary">Cek</button>
+                            </div>
+                            @error('memberPhone') <p class="mt-1 text-xs text-rose-600" role="alert">{{ $message }}</p> @enderror
+                            @if ($memberRegister)
+                                <div class="mt-3 space-y-2 rounded-lg bg-slate-50 p-3">
+                                    <p class="text-xs font-medium text-slate-700">Nomor belum terdaftar — daftarkan sekarang:</p>
+                                    <input type="text" wire:model="memberName" placeholder="Nama pelanggan" class="input h-11">
+                                    @error('memberName') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                                    <input type="password" inputmode="numeric" maxlength="4" wire:model="memberPin" placeholder="PIN 4 angka (diisi pelanggan)" class="input h-11 tabular-nums">
+                                    @error('memberPin') <p class="text-xs text-rose-600">{{ $message }}</p> @enderror
+                                    <label class="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" wire:model="memberConsent" class="mt-0.5"> Pelanggan setuju dihubungi lewat WhatsApp (info promo & cap).</label>
+                                    <button type="button" wire:click="registerMember" class="btn btn-primary w-full">Daftarkan member</button>
+                                </div>
+                            @endif
+                        @endif
+                    </div>
                     <fieldset>
                         <legend class="label">Metode bayar</legend>
                         <div class="grid grid-cols-4 gap-2">
@@ -669,6 +711,16 @@
                     <h3 class="mt-3 text-base font-semibold">Pembayaran berhasil</h3>
                     <p class="text-xs text-slate-500 tabular-nums">{{ $lt->number }}</p>
                     <div class="mt-4 text-3xl font-bold tabular-nums tracking-tight">{{ $rp($lt->total) }}</div>
+                    @if ($lt->customer)
+                        <div class="mt-3 rounded-lg bg-indigo-50 px-4 py-2.5 text-left text-sm text-indigo-900">
+                            <div class="font-semibold">{{ $lt->customer->name }}</div>
+                            <div class="text-xs">
+                                @if ($lt->stamps_earned) +{{ $lt->stamps_earned }} cap @endif
+                                @if ($lt->stamps_used) · {{ $lt->stamps_used }} cap ditukar hadiah @endif
+                                · saldo <b>{{ $lt->customer->stamps }}</b> / {{ \App\Models\Customer::perReward() }}
+                            </div>
+                        </div>
+                    @endif
                     @if ($lt->change_amount > 0)
                         <div class="mt-3 flex items-center justify-between rounded-lg bg-emerald-50 px-4 py-2.5 text-emerald-800">
                             <span class="text-sm font-medium">Kembalian</span>
@@ -684,6 +736,27 @@
                     <button wire:click="newOrder" class="btn btn-primary btn-lg w-full">Pesanan baru</button>
                 </div>
             </div>
+        </div>
+    @endif
+
+    {{-- ================= MODAL: tukar hadiah Jelly Point (pelanggan mengetik PIN sendiri) ================= --}}
+    @if ($rewardOpen)
+        <div class="modal-backdrop z-50" role="dialog" aria-modal="true" aria-labelledby="reward-title">
+            <form wire:submit="redeemReward" class="modal sm:max-w-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 id="reward-title" class="text-base font-semibold">🎁 Tukar hadiah</h3>
+                    <p class="mt-1 text-xs text-slate-500">Minta pelanggan mengetik PIN 4 angkanya. Minuman gratis diundi acak.</p>
+                </div>
+                <div class="px-5 py-4">
+                    <input type="password" inputmode="numeric" maxlength="4" autofocus wire:model="rewardPin" autocomplete="off"
+                           class="input h-14 text-center text-2xl tracking-[0.5em] tabular-nums" aria-label="PIN pelanggan">
+                    @error('rewardPin') <p class="mt-2 text-sm font-medium text-rose-600" role="alert">{{ $message }}</p> @enderror
+                </div>
+                <div class="flex gap-2 border-t border-slate-200 px-5 py-3">
+                    <button type="button" wire:click="$set('rewardOpen', false)" class="btn btn-secondary">Batal</button>
+                    <button type="submit" class="btn btn-primary flex-1">Undi hadiah</button>
+                </div>
+            </form>
         </div>
     @endif
 

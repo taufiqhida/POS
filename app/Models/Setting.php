@@ -18,6 +18,7 @@ class Setting extends Model
         'store_name' => 'JELLY POTTER',
         'store_tagline' => 'Jelly Drink & Smoothies',
         'receipt_footer' => 'Terima kasih! Follow IG @jellypotter',
+        'stamps_per_reward' => '20',
         'owner_whatsapp' => '',
         'report_webhook_url' => '',
     ];

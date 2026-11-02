@@ -40,6 +40,10 @@ class Settings extends Page implements HasForms
                     ->helperText('Dipakai di laporan harian, dan sebagai judul nota bila "Judul nota" outlet dikosongkan. Judul, alamat & No. HP nota diatur per outlet di menu Outlet.'),
                 Textarea::make('receipt_footer')->label('Catatan bawah struk')->columnSpanFull(),
             ]),
+            Section::make('Jelly Point')->schema([
+                TextInput::make('stamps_per_reward')->label('Cap untuk 1 minuman gratis')->numeric()->minValue(1)->maxValue(200)->required()
+                    ->helperText('Hadiah berupa minuman acak dari menu bertanda 🎁 di Admin › Menu. Cap per item diatur di tiap menu.'),
+            ]),
             Section::make('Notifikasi ke HP owner')->columns(2)->schema([
                 TextInput::make('owner_whatsapp')->label('No. WhatsApp owner')->tel()->placeholder('08xxxxxxxxxx'),
                 TextInput::make('report_webhook_url')->label('URL webhook gateway WA (opsional)')->url()

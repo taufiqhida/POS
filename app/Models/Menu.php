@@ -12,9 +12,28 @@ class Menu extends Model
 {
     use HasUuids, SoftDeletes;
 
-    protected $fillable = ['outlet_id', 'name', 'category', 'image', 'base_price', 'free_toppings', 'topping_group', 'is_active', 'is_best'];
+    protected $fillable = ['outlet_id', 'name', 'category', 'image', 'base_price', 'free_toppings', 'stamps', 'topping_group', 'is_active', 'is_best', 'is_reward'];
 
-    protected $casts = ['is_active' => 'boolean', 'is_best' => 'boolean', 'base_price' => 'integer', 'free_toppings' => 'integer'];
+    protected $casts = ['is_active' => 'boolean', 'is_best' => 'boolean', 'is_reward' => 'boolean', 'stamps' => 'integer', 'base_price' => 'integer', 'free_toppings' => 'integer'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Menu $m) {
+            if (! array_key_exists('stamps', $m->getAttributes())) {
+                $m->stamps = static::defaultStamps($m->category, (int) $m->base_price);
+            }
+        });
+    }
+
+    /** Cap per item: makanan berat 3, minuman Rp10.000 ke atas 2, selebihnya 1. Owner bisa mengubah per menu. */
+    public static function defaultStamps(?string $category, int $price): int
+    {
+        if (preg_match('/waffle|kebab|burger|maryam/i', (string) $category)) {
+            return 3;
+        }
+
+        return $price >= 10000 ? 2 : 1;
+    }
 
     /**
      * ID menu "Best" untuk satu outlet: yang ditandai owner, atau — bila belum ada yang ditandai —

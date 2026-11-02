@@ -1,44 +1,35 @@
-# Royalty "Jelly Point" (rencana, belum dikerjakan)
+# Royalty "Jelly Point" (SUDAH DIKERJAKAN)
 
-## Konsep
-- Member cukup nomor HP + nama + PIN pelanggan 4 angka. Tanpa aplikasi.
-- Stempel digital, otomatis saat pembayaran dikonfirmasi. Tidak ada kartu fisik.
+## Cara kerja
+- Member = nomor HP + nama + PIN 4 angka (diketik pelanggan sendiri). Tanpa aplikasi, tanpa kartu.
+- Kasir mengisi **No. HP member** di layar bayar (opsional). Nomor baru → form daftar (nama, PIN, centang setuju dihubungi WA).
+- Cap otomatis masuk saat pembayaran dikonfirmasi. **Cap digabung di Tembalang & Grafika.**
+- **20 cap = 1 minuman gratis acak** (angka 20 bisa diubah di Admin › Pengaturan › Jelly Point).
+- Tukar hadiah: kasir tekan "Tukar … cap", **pelanggan mengetik PIN-nya**, sistem mengundi minuman dari menu bertanda 🎁 (per outlet). Item hadiah Rp0, hanya 1 per pesanan.
 
-## Stempel per menu (bisa diatur owner di Admin > Menu)
-- Es Teh / Croffle: 1
-- Jelly / minuman Rp10.000 ke atas: 2
-- Waffle / Kebab / Burger: 3
-- Topping dan tambahan tidak menambah stempel. Item hadiah tidak dapat stempel.
-
-## Hadiah
-- 10 stempel: Es Teh Teh Series
-- 20 stempel: Medium Series
-- 35 stempel: Jelly reguler + 1 topping
-
-## Alur kasir
-1. Layar bayar: kolom opsional "No. HP member", plus pengingat "Tanya nomor member".
-2. Nomor baru: tombol Daftar.
-3. Setelah bayar tampil stempel yang didapat dan sisa menuju hadiah; struk memuat jumlah stempel + QR cek stempel.
-4. Tukar hadiah: pelanggan ketik PIN, item Rp0, stempel berkurang; batal = stempel kembali.
+## Cap per item (diatur owner di Admin › Menu, kolom "Cap Jelly Point per item")
+- Otomatis awal: Waffle/Kebab/Burger/Maryam = 3, minuman Rp10.000 ke atas = 2, selebihnya = 1.
+- Topping tidak menambah cap. Item gratis promo dan item hadiah tidak dapat cap.
+- Pesanan GoFood/GrabFood/ShopeeFood tidak dapat cap.
 
 ## Aturan
-- Lupa nomor: bisa ditambahkan di Riwayat selama shift yang sama.
-- Void/refund disetujui: stempel ditarik. Masih menunggu: stempel belum bisa ditukar.
-- Pesanan GoFood/GrabFood/ShopeeFood tidak dapat stempel.
-- Stempel kedaluwarsa 6 bulan setelah kunjungan terakhir.
-- Owner melihat stempel, penukaran, dan persentase transaksi ber-member per pegawai.
-- Lupa PIN: direset owner/manager setelah mencocokkan nomor HP.
+- Karyawan (ditandai owner di Admin › Member): tidak dapat cap, tidak bisa menukar hadiah.
+- Void/refund **disetujui**: cap yang didapat ditarik, cap yang dipakai untuk hadiah dikembalikan. Selama masih menunggu verifikasi, saldo belum berubah.
+- Cap hangus bila 6 bulan tidak berkunjung (dihitung saat member dipakai lagi).
+- PIN salah 5× → PIN terkunci; owner/manager reset di Admin › Member › Reset PIN setelah mencocokkan nomor HP.
+- Tiap perubahan cap tercatat di `stamp_logs` (earn / redeem / reverse / expire).
 
-## WhatsApp: hanya manual, tanpa gateway
-- Daftar "Perlu dihubungi" (30 hari tidak datang, ulang tahun, stempel hampir penuh).
-- Tombol Kirim WA membuka link wa.me dengan pesan terisi; dikirim manual lalu ditandai sudah dihubungi.
-- Tombol Berikutnya, tanpa "kirim semua". Saran maksimal 20 pesan per hari, beberapa template.
-- Hanya ke pelanggan yang setuju dihubungi.
-
-## Ide tambahan (setelah uji coba)
-- Hari stempel ganda jam sepi, hadiah ulang tahun, ajak teman, level member.
+## WhatsApp: hanya manual
+- Admin › Penjualan › Member Jelly Point: filter **Perlu dihubungi** (setuju dihubungi, tidak datang 30 hari atau cap hampir penuh, belum dihubungi 14 hari terakhir).
+- Tombol **Kirim WA** membuka wa.me dengan pesan terisi, dikirim manual satu per satu, lalu tekan **Sudah dihubungi**. Tidak ada kirim massal / gateway. Saran: maksimal ±20 pesan per hari.
 
 ## Keputusan
 1. Stempel digabung untuk dua outlet.
-2. Langsung berlaku di Tembalang dan Grafika, tanpa uji coba satu outlet.
-3. Modal tidak perlu dihitung: hadiah berupa minuman acak dari daftar pilihan owner (menggantikan hadiah tetap di atas; detail per tingkat dikonfirmasi sebelum dikerjakan).
+2. Langsung berlaku di kedua outlet.
+3. Hadiah satu tingkat: minuman acak dari daftar pilihan owner.
+4. Karyawan tidak dapat cap. Jatah minuman karyawan & level member ditunda.
+
+## Belum dibuat (ide lanjutan)
+- Level member, hari cap ganda, hadiah ulang tahun, ajak teman.
+- Laporan cap/penukaran per pegawai, QR cek cap di struk.
+- Menambahkan nomor HP ke transaksi yang sudah selesai (lupa nomor).
