@@ -10,7 +10,7 @@ class StockMovement extends Model
 {
     use HasUuids;
 
-    public const REASONS = ['sale' => 'Penjualan', 'restock' => 'Restock', 'adjustment' => 'Koreksi', 'waste' => 'Waste', 'void' => 'Batal/Refund'];
+    public const REASONS = ['sale' => 'Penjualan', 'restock' => 'Restock', 'adjustment' => 'Koreksi', 'waste' => 'Waste', 'void' => 'Batal/Refund', 'transfer' => 'Dari gudang'];
 
     protected $fillable = ['outlet_id', 'ingredient_id', 'qty_change', 'reason', 'reference_id', 'user_id', 'note'];
 

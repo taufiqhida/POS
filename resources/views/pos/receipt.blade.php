@@ -28,6 +28,7 @@
     @foreach ($trx->items as $i)
         <div>{{ $i->menu_name }}{{ $i->size ? ' ('.$i->size.')' : '' }}</div>
         @foreach ($i->toppings as $t) <div class="s">&nbsp;+ {{ $t->topping_name }}</div> @endforeach
+        @if ($i->promo_name) <div class="s">&nbsp;★ GRATIS — {{ $i->promo_name }}</div> @endif
         <div class="row"><span>&nbsp;{{ $i->qty }} x {{ number_format($i->price_each, 0, ',', '.') }}</span><span>{{ number_format($i->subtotal, 0, ',', '.') }}</span></div>
     @endforeach
     <hr>

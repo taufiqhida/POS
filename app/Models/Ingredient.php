@@ -16,6 +16,12 @@ class Ingredient extends Model
 
     protected $casts = ['stock_current' => 'float', 'stock_min' => 'float'];
 
+    protected static function booted(): void
+    {
+        // Bahan baru di outlet otomatis punya kartu di gudang utama (stok awal 0).
+        static::created(fn (Ingredient $i) => WarehouseItem::firstOrCreate(['name' => $i->name], ['unit' => $i->unit]));
+    }
+
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);

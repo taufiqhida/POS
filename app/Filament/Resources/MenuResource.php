@@ -36,8 +36,10 @@ class MenuResource extends Resource
             Forms\Components\Section::make('Menu')->columns(2)->schema([
                 Forms\Components\Select::make('outlet_id')->label('Outlet')->relationship('outlet', 'name')->required()->live(),
                 Forms\Components\TextInput::make('name')->label('Nama menu')->required(),
-                Forms\Components\TextInput::make('category')->label('Kategori')->default('Minuman')->required()
-                    ->datalist(fn () => Menu::distinct()->pluck('category')->all()),
+                Forms\Components\Select::make('category')->label('Kategori')->required()->searchable()
+                    ->options(fn () => \App\Models\Category::ordered()->mapWithKeys(fn ($n) => [$n => $n])->all())
+                    ->createOptionForm([Forms\Components\TextInput::make('name')->label('Nama kategori baru')->required()->maxLength(60)])
+                    ->createOptionUsing(fn (array $data) => \App\Models\Category::ensure(trim($data['name']))->name),
                 Forms\Components\TextInput::make('base_price')->label('Harga dasar')->numeric()->prefix('Rp')->required()
                     ->disabled(fn (string $operation) => $operation === 'edit' && ! $canPrice())
                     ->helperText(fn () => $canPrice() ? null : '🔒 Hanya owner / manager berhak yang bisa mengubah harga.'),
@@ -100,7 +102,7 @@ class MenuResource extends Resource
         ])->filters([
             Tables\Filters\SelectFilter::make('outlet_id')->relationship('outlet', 'name')->label('Outlet'),
             Tables\Filters\TernaryFilter::make('is_best')->label('Best menu'),
-            Tables\Filters\SelectFilter::make('category')->options(fn () => Menu::distinct()->pluck('category', 'category')->all())->label('Kategori'),
+            Tables\Filters\SelectFilter::make('category')->options(fn () => \App\Models\Category::ordered()->mapWithKeys(fn ($n) => [$n => $n])->all())->label('Kategori'),
         ])->actions([
             Tables\Actions\EditAction::make()->slideOver(),
             Tables\Actions\Action::make('copy')->label('Salin ke outlet lain')->icon('heroicon-o-document-duplicate')

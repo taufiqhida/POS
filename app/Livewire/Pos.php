@@ -169,7 +169,11 @@ class Pos extends Component
     #[Computed]
     public function categories()
     {
-        return Menu::where('outlet_id', $this->outletId)->where('is_active', true)->distinct()->orderBy('category')->pluck('category');
+        // Urutan sesuai pengaturan owner; hanya kategori yang punya menu aktif di outlet ini.
+        $used = Menu::where('outlet_id', $this->outletId)->where('is_active', true)->distinct()->pluck('category');
+        $ordered = \App\Models\Category::ordered()->filter(fn ($n) => $used->contains($n));
+
+        return $ordered->concat($used->diff($ordered)->sort())->values();
     }
 
     #[Computed]
@@ -216,6 +220,65 @@ class Pos extends Component
             $this->afterCartShrink();
             $this->toast(implode(', ', $removed).' sudah tidak tersedia dan dikeluarkan dari pesanan.', 'error');
         }
+
+        // Item gratis promo yang sudah tidak berhak (item pemicu dikurangi / promo dimatikan) ikut dikeluarkan.
+        if ($this->cart) {
+            [$this->cart, $gone] = app(PosService::class)->pruneFreeLines($this->outletId, $this->cart);
+            if ($gone) {
+                $this->afterCartShrink();
+                $this->toast('Gratisan dibatalkan: '.implode(', ', $gone).'. Syarat promo tidak terpenuhi lagi.', 'error');
+            }
+        }
+    }
+
+    // ---------- Promo "beli X gratis Y" ----------
+
+    public ?string $freePromoId = null;
+
+    /** @return array<int, array<string, mixed>> */
+    #[Computed]
+    public function offers(): array
+    {
+        return app(PosService::class)->offers($this->outletId, array_values($this->cart));
+    }
+
+    public function openFree(string $promoId): void
+    {
+        $this->freePromoId = $promoId;
+    }
+
+    public function claimFree(string $menuId): void
+    {
+        $offer = collect($this->offers)->first(fn ($o) => $o['promo']->id === $this->freePromoId);
+        $menu = $offer ? $offer['menus']->firstWhere('id', $menuId) : null;
+        if (! $offer || ! $menu || $offer['remaining'] < 1) {
+            $this->freePromoId = null;
+            $this->toast('Gratisan sudah tidak tersedia.', 'error');
+
+            return;
+        }
+        // Menu bergaris ukuran: pakai ukuran normal (Reguler); owner sebaiknya memilih hadiah tanpa ukuran khusus.
+        $variant = $menu->variants->first(fn ($v) => in_array($v->size, ['Reguler', 'Regular'])) ?? $menu->variants->first();
+        $sig = 'free|'.$offer['promo']->id.'|'.$menu->id;
+        foreach ($this->cart as $k => $line) {
+            if ($line['sig'] === $sig) {
+                $this->cart[$k]['qty']++;
+                $sig = null;
+                break;
+            }
+        }
+        if ($sig) {
+            $this->cart[(string) Str::uuid()] = [
+                'sig' => $sig, 'menu_id' => $menu->id, 'variant_id' => $variant?->id, 'topping_ids' => [], 'qty' => 1,
+                'price_override' => null, 'name' => $menu->name, 'size' => $variant?->size, 'topping_names' => '',
+                'promo_id' => $offer['promo']->id,
+            ];
+        }
+        unset($this->offers, $this->priced);
+        if (collect($this->offers)->first(fn ($o) => $o['promo']->id === $this->freePromoId)['remaining'] ?? 0) {
+            return;   // masih ada jatah gratis, biarkan daftar pilihan terbuka
+        }
+        $this->freePromoId = null;
     }
 
     /** Pesanan kosong = pelanggan baru: diskon manual & persetujuan PIN tidak boleh terbawa. */
@@ -316,13 +379,15 @@ class Pos extends Component
             'name' => $menu->name,
             'size' => $variant?->size,
             'topping_names' => $toppings->pluck('name')->implode(', '),
+            'promo_id' => null,
         ];
         $this->pickMenuId = null;
     }
 
     public function qty(string $key, int $delta): void
     {
-        if (! isset($this->cart[$key])) {
+        // Jumlah item gratis diatur oleh promo; kasir hanya bisa menghapusnya.
+        if (! isset($this->cart[$key]) || ! empty($this->cart[$key]['promo_id'])) {
             return;
         }
         $this->cart[$key]['qty'] += $delta;
@@ -340,7 +405,7 @@ class Pos extends Component
 
     public function clearCart(): void
     {
-        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen');
+        $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen', 'freePromoId');
         $this->channel = 'offline';
         $this->method = 'cash';
     }
@@ -493,6 +558,51 @@ class Pos extends Component
     public function usageHistory()
     {
         return StockMovement::with(['ingredient', 'user'])->where('outlet_id', $this->outletId)->latest()->limit(50)->get();
+    }
+
+    // ---------- Ambil bahan dari gudang utama ----------
+
+    public bool $takeOpen = false;
+
+    public ?string $takeItemId = null;
+
+    public ?string $takeQty = null;
+
+    public string $takeNote = '';
+
+    #[Computed]
+    public function warehouseItems()
+    {
+        return \App\Models\WarehouseItem::orderBy('name')->get();
+    }
+
+    public function openTake(?string $itemId = null): void
+    {
+        $this->reset('takeQty', 'takeNote');
+        $this->takeItemId = $itemId;
+        $this->takeOpen = true;
+        $this->resetErrorBag();
+    }
+
+    public function submitTake(\App\Services\WarehouseService $wh): void
+    {
+        $this->validate([
+            'takeItemId' => 'required|exists:warehouse_items,id',
+            'takeQty' => 'required|numeric|gt:0|max:'.\App\Services\WarehouseService::MAX_QTY,
+            'takeNote' => 'nullable|string|max:120',
+        ], [], ['takeItemId' => 'bahan', 'takeQty' => 'jumlah']);
+
+        $item = \App\Models\WarehouseItem::findOrFail($this->takeItemId);
+        try {
+            $wh->transfer($item, $this->outlet, (float) $this->takeQty, Auth::user(), $this->takeNote ?: null);
+        } catch (ValidationException $e) {
+            $this->addError('takeQty', $e->validator->errors()->first());
+
+            return;
+        }
+        $this->takeOpen = false;
+        unset($this->ingredients, $this->usageHistory, $this->warehouseItems);
+        $this->toast("{$this->takeQty} {$item->unit} {$item->name} diambil dari gudang.");
     }
 
     public function saveStockCount(): void

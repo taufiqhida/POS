@@ -227,21 +227,36 @@
                                     <div class="mt-0.5 text-xs text-slate-500">
                                         {{ $line['size'] }}@if($line['topping_names']) · {{ $line['topping_names'] }}@endif
                                     </div>
-                                    <div class="mt-0.5 text-xs tabular-nums text-slate-500">
-                                        {{ $rp($p['each'] ?? 0) }} / cup
-                                        @if ($line['price_override'] !== null)<span class="ml-1 badge bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200">harga diubah</span>@endif
-                                    </div>
+                                    @if (! empty($line['promo_id']))
+                                        <div class="mt-1"><span class="badge bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200">🎁 GRATIS · {{ $p['promo_name'] ?? 'Promo' }}</span></div>
+                                    @else
+                                        <div class="mt-0.5 text-xs tabular-nums text-slate-500">
+                                            {{ $rp($p['each'] ?? 0) }} / cup
+                                            @if ($line['price_override'] !== null)<span class="ml-1 badge bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-200">harga diubah</span>@endif
+                                        </div>
+                                    @endif
                                 </div>
-                                <div class="text-sm font-semibold tabular-nums">{{ $rp($p['lineTotal'] ?? 0) }}</div>
+                                @if (! empty($line['promo_id']))
+                                    <div class="text-right text-sm tabular-nums">
+                                        <div class="font-semibold text-emerald-700">Gratis</div>
+                                        <div class="text-xs text-slate-400 line-through">{{ $rp(($p['listPrice'] ?? 0) * $line['qty']) }}</div>
+                                    </div>
+                                @else
+                                    <div class="text-sm font-semibold tabular-nums">{{ $rp($p['lineTotal'] ?? 0) }}</div>
+                                @endif
                             </div>
                             <div class="mt-3 flex items-center gap-2">
-                                <div class="inline-flex items-center rounded-lg border border-slate-300">
-                                    <button wire:click="qty('{{ $key }}', -1)" class="grid size-9 place-items-center text-slate-600 hover:bg-slate-50 rounded-l-lg" aria-label="Kurangi">−</button>
-                                    <span class="w-8 text-center text-sm font-semibold tabular-nums">{{ $line['qty'] }}</span>
-                                    <button wire:click="qty('{{ $key }}', 1)" class="grid size-9 place-items-center text-slate-600 hover:bg-slate-50 rounded-r-lg" aria-label="Tambah">+</button>
-                                </div>
-                                <button wire:click="askPin('price', {key: '{{ $key }}'})" class="btn btn-ghost btn-sm ml-auto">Ubah harga</button>
-                                <button wire:click="removeLine('{{ $key }}')" class="btn btn-ghost btn-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700">Hapus</button>
+                                @if (! empty($line['promo_id']))
+                                    <span class="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold tabular-nums text-slate-600">{{ $line['qty'] }}×</span>
+                                @else
+                                    <div class="inline-flex items-center rounded-lg border border-slate-300">
+                                        <button wire:click="qty('{{ $key }}', -1)" class="grid size-9 place-items-center text-slate-600 hover:bg-slate-50 rounded-l-lg" aria-label="Kurangi">−</button>
+                                        <span class="w-8 text-center text-sm font-semibold tabular-nums">{{ $line['qty'] }}</span>
+                                        <button wire:click="qty('{{ $key }}', 1)" class="grid size-9 place-items-center text-slate-600 hover:bg-slate-50 rounded-r-lg" aria-label="Tambah">+</button>
+                                    </div>
+                                    <button wire:click="askPin('price', {key: '{{ $key }}'})" class="btn btn-ghost btn-sm ml-auto">Ubah harga</button>
+                                @endif
+                                <button wire:click="removeLine('{{ $key }}')" class="btn btn-ghost btn-sm {{ ! empty($line['promo_id']) ? 'ml-auto ' : '' }}text-rose-600 hover:bg-rose-50 hover:text-rose-700">Hapus</button>
                             </div>
                         </div>
                     @empty
@@ -254,6 +269,28 @@
                         </div>
                     @endforelse
                 </div>
+
+                @php($activeOffers = collect($this->offers)->filter(fn ($o) => $o['remaining'] > 0 || ($o['count'] > 0 && $o['earned'] === $o['used'])))
+                @if ($cart && $activeOffers->isNotEmpty())
+                    <div class="space-y-2 border-t border-slate-200 bg-white px-5 py-3">
+                        @foreach ($activeOffers as $o)
+                            @if ($o['remaining'] > 0)
+                                <button type="button" wire:click="openFree('{{ $o['promo']->id }}')"
+                                        class="flex w-full items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-left ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100">
+                                    <span class="min-w-0">
+                                        <span class="block truncate text-sm font-semibold text-emerald-900">🎁 {{ $o['promo']->name }}</span>
+                                        <span class="block text-xs text-emerald-800">Dapat {{ $o['remaining'] }} gratisan — pilih sekarang</span>
+                                    </span>
+                                    <span class="shrink-0 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white">Pilih</span>
+                                </button>
+                            @elseif ($o['need'] > 0)
+                                <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
+                                    Tambah <b>{{ $o['need'] }}</b> lagi untuk promo <b>{{ $o['promo']->name }}</b>.
+                                </p>
+                            @endif
+                        @endforeach
+                    </div>
+                @endif
 
                 <div class="border-t border-slate-200 bg-slate-50/60 px-5 py-4 space-y-4">
                     <dl class="space-y-1.5 text-sm">
@@ -285,6 +322,9 @@
                             <span class="flex items-center gap-2">
                                 <span class="grid size-6 place-items-center rounded-full bg-indigo-600 text-xs font-bold text-white tabular-nums">{{ collect($cart)->sum('qty') }}</span>
                                 <span>Pesanan</span>
+                                @if (collect($this->offers)->sum('remaining') > 0)
+                                    <span class="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white">🎁 Gratis</span>
+                                @endif
                             </span>
                             <span class="font-semibold tabular-nums text-slate-900">{{ $rp($this->priced['total']) }}</span>
                         </button>
@@ -426,7 +466,10 @@
                             <h2 class="card-title">Stok bahan & cek fisik</h2>
                             <p class="text-xs text-slate-500">Hitung semua bahan. <b>Kosongkan</b> kalau jumlahnya sama dengan sistem — cukup ketik yang berbeda.</p>
                         </div>
-                        <button class="btn btn-primary btn-sm ml-auto">Simpan cek stok</button>
+                        <div class="ml-auto flex gap-2">
+                            <button type="button" wire:click="openTake()" class="btn btn-secondary btn-sm">Ambil dari gudang</button>
+                            <button class="btn btn-primary btn-sm">Simpan cek stok</button>
+                        </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
@@ -639,6 +682,72 @@
                     <button wire:click="newOrder" class="btn btn-primary btn-lg w-full">Pesanan baru</button>
                 </div>
             </div>
+        </div>
+    @endif
+
+    {{-- ================= MODAL: pilih gratisan promo ================= --}}
+    @if ($freePromoId)
+        @php($fo = collect($this->offers)->first(fn ($o) => $o['promo']->id === $freePromoId))
+        @if ($fo)
+            <div class="modal-backdrop z-50" wire:click.self="$set('freePromoId', null)" role="dialog" aria-modal="true" aria-labelledby="free-title">
+                <div class="modal sm:max-w-lg">
+                    <div class="border-b border-slate-200 px-5 py-4">
+                        <h3 id="free-title" class="text-base font-semibold">🎁 {{ $fo['promo']->name }}</h3>
+                        <p class="mt-1 text-xs text-slate-500">Pilih gratisan — tersisa <b>{{ $fo['remaining'] }}</b>. {{ $fo['promo']->describe() }}</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 px-5 py-4">
+                        @forelse ($fo['menus'] as $fm)
+                            <button type="button" wire:click="claimFree('{{ $fm->id }}')" class="option text-left">
+                                <span class="block text-sm font-semibold">{{ $fm->name }}</span>
+                                <span class="block text-xs text-slate-500">{{ $fm->category }} · normal {{ $rp($fm->variants->first()?->price ?? $fm->base_price) }}</span>
+                            </button>
+                        @empty
+                            <p class="col-span-2 py-6 text-center text-sm text-slate-500">Belum ada menu hadiah yang tersedia di outlet ini.</p>
+                        @endforelse
+                    </div>
+                    <div class="border-t border-slate-200 px-5 py-3">
+                        <button type="button" wire:click="$set('freePromoId', null)" class="btn btn-secondary w-full">Nanti saja</button>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endif
+
+    {{-- ================= MODAL: ambil bahan dari gudang ================= --}}
+    @if ($takeOpen)
+        @php($ti = $this->warehouseItems->firstWhere('id', $takeItemId))
+        <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="take-title">
+            <form wire:submit="submitTake" class="modal sm:max-w-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 id="take-title" class="text-base font-semibold">Ambil dari gudang</h3>
+                    <p class="mt-1 text-xs text-slate-500">Stok gudang utama berkurang, stok {{ $this->outlet->name }} bertambah.</p>
+                </div>
+                <div class="space-y-3 px-5 py-4">
+                    <div>
+                        <label class="label" for="takeItem">Bahan</label>
+                        <select id="takeItem" wire:model.live="takeItemId" class="input h-11">
+                            <option value="">Pilih bahan…</option>
+                            @foreach ($this->warehouseItems as $w)
+                                <option value="{{ $w->id }}">{{ $w->name }} — gudang {{ $num($w->stock_current) }} {{ $w->unit }}</option>
+                            @endforeach
+                        </select>
+                        @error('takeItemId') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="label" for="takeQty">Jumlah diambil @if($ti)<span class="font-normal text-slate-400">({{ $ti->unit }})</span>@endif</label>
+                        <input id="takeQty" type="number" inputmode="decimal" step="0.01" wire:model="takeQty" class="input h-11 tabular-nums">
+                        @error('takeQty') <p class="mt-1 text-xs text-rose-600" role="alert">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="label" for="takeNote">Catatan (opsional)</label>
+                        <input id="takeNote" wire:model="takeNote" class="input h-11" maxlength="120">
+                    </div>
+                </div>
+                <div class="flex gap-2 border-t border-slate-200 px-5 py-4">
+                    <button type="button" wire:click="$set('takeOpen', false)" class="btn btn-secondary">Batal</button>
+                    <button class="btn btn-primary flex-1">Ambil</button>
+                </div>
+            </form>
         </div>
     @endif
 

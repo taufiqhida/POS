@@ -96,6 +96,7 @@ class MenuSeeder extends Seeder
         foreach (Outlet::all() as $outlet) {
             $mine = array_filter($menus, fn ($m) => ! $m['outlets'] || in_array($outlet->name, $m['outlets']));
             foreach ($mine as $m) {
+                \App\Models\Category::ensure($m['category']);
                 $menu = Menu::updateOrCreate(['outlet_id' => $outlet->id, 'name' => $m['name']], [
                     'category' => $m['category'], 'base_price' => $m['price'], 'free_toppings' => $m['free'],
                     'topping_group' => $m['group'], 'is_active' => true,

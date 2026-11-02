@@ -25,48 +25,36 @@ class PosService
     /**
      * Hitung ulang keranjang dari harga di database (harga dari klien tidak dipercaya).
      *
-     * $cart: [['menu_id', 'variant_id', 'qty', 'topping_ids' => [], 'price_override' => ?int]]
+     * $cart: [['menu_id', 'variant_id', 'qty', 'topping_ids' => [], 'price_override' => ?int, 'promo_id' => ?string]]
+     * Baris dengan promo_id = item gratis dari promo "beli X gratis Y"; hanya sah sebanyak yang sudah didapat.
      * $manualDiscount: diskon manual (butuh approver).
      */
     public function price(string $outletId, array $cart, int $manualDiscount = 0): array
     {
-        $lines = [];
-        $subtotal = 0;
-        foreach ($cart as $row) {
-            $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->find($row['menu_id']);
-            if (! $menu) {
-                throw ValidationException::withMessages(['cart' => ($row['name'] ?? 'Menu').' sudah tidak tersedia. Hapus dari pesanan.']);
+        $built = [];
+        $free = [];
+        foreach ($cart as $i => $row) {
+            if (! empty($row['promo_id'])) {
+                $free[$i] = $row;
+            } else {
+                $built[$i] = $this->buildLine($outletId, $row);
             }
-            $variant = ! empty($row['variant_id']) ? MenuVariant::where('menu_id', $menu->id)->find($row['variant_id']) : null;
-            if (! empty($row['variant_id']) && ! $variant) {
-                throw ValidationException::withMessages(['cart' => "Ukuran {$menu->name} sudah tidak tersedia. Hapus dari pesanan."]);
-            }
-            $qty = (int) $row['qty'];
-            if ($qty < 1 || $qty > self::MAX_QTY) {
-                throw ValidationException::withMessages(['cart' => "Jumlah {$menu->name} harus 1–".self::MAX_QTY.'.']);
-            }
-            if (! $variant && $menu->variants()->exists()) {
-                throw ValidationException::withMessages(['cart' => "Pilih ukuran untuk {$menu->name}."]);
-            }
-            $toppings = Topping::whereIn('id', $row['topping_ids'] ?? [])->where('is_active', true)
-                ->where('group', $menu->topping_group)->get();
-            $base = $variant?->price ?? $menu->base_price;
-            $overridden = isset($row['price_override']) && $row['price_override'] !== null && (int) $row['price_override'] !== $base;
-            if ($overridden) {
-                $base = max(0, (int) $row['price_override']);
-            }
-            // Topping gratis: yang termahal digratiskan lebih dulu.
-            $freeIds = $toppings->sortByDesc('price')->take($menu->free_toppings)->pluck('id')->all();
-            $toppingPrice = fn (Topping $t) => in_array($t->id, $freeIds) ? 0 : $t->price;
-            $each = $base + (int) $toppings->sum($toppingPrice);
-            $lineTotal = $each * $qty;
-            $subtotal += $lineTotal;
-            $lines[] = compact('menu', 'variant', 'toppings', 'qty', 'each', 'lineTotal', 'overridden', 'base', 'freeIds');
         }
 
+        // Hadiah hanya dihitung dari item biasa (item gratis tidak ikut memicu promo).
+        $earned = $this->earned(Promo::freeItemPromos($outletId), array_map(fn ($l) => ['menu' => $l['menu'], 'qty' => $l['qty']], $built));
+        $used = [];
+        foreach ($free as $i => $row) {
+            $built[$i] = $this->buildFreeLine($outletId, $row, $earned, $used);
+        }
+        ksort($built);
+        $lines = array_values($built);
+
+        $subtotal = (int) array_sum(array_column($lines, 'lineTotal'));
         $promo = Promo::bestFor($outletId, $subtotal);
         $discount = $promo['amount'] ?? 0;
-        $label = $promo['label'] ?? null;
+        $freeNames = collect($lines)->pluck('promo_name')->filter()->unique()->values()->all();
+        $label = implode(' + ', array_filter([$promo['label'] ?? null, ...$freeNames])) ?: null;
         if ($manualDiscount > 0) {
             $discount = min($subtotal, $discount + $manualDiscount);
             $label = trim(($label ? $label.' + ' : '').'Diskon manual');
@@ -79,6 +67,169 @@ class PosService
             'discount_label' => $label,
             'total' => $subtotal - $discount,
         ];
+    }
+
+    /** Satu baris pesanan biasa. */
+    private function buildLine(string $outletId, array $row): array
+    {
+        $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->find($row['menu_id']);
+        if (! $menu) {
+            throw ValidationException::withMessages(['cart' => ($row['name'] ?? 'Menu').' sudah tidak tersedia. Hapus dari pesanan.']);
+        }
+        $variant = ! empty($row['variant_id']) ? MenuVariant::where('menu_id', $menu->id)->find($row['variant_id']) : null;
+        if (! empty($row['variant_id']) && ! $variant) {
+            throw ValidationException::withMessages(['cart' => "Ukuran {$menu->name} sudah tidak tersedia. Hapus dari pesanan."]);
+        }
+        $qty = (int) $row['qty'];
+        if ($qty < 1 || $qty > self::MAX_QTY) {
+            throw ValidationException::withMessages(['cart' => "Jumlah {$menu->name} harus 1–".self::MAX_QTY.'.']);
+        }
+        if (! $variant && $menu->variants()->exists()) {
+            throw ValidationException::withMessages(['cart' => "Pilih ukuran untuk {$menu->name}."]);
+        }
+        $toppings = Topping::whereIn('id', $row['topping_ids'] ?? [])->where('is_active', true)
+            ->where('group', $menu->topping_group)->get();
+        $base = $variant?->price ?? $menu->base_price;
+        $overridden = isset($row['price_override']) && $row['price_override'] !== null && (int) $row['price_override'] !== $base;
+        if ($overridden) {
+            $base = max(0, (int) $row['price_override']);
+        }
+        // Topping gratis: yang termahal digratiskan lebih dulu.
+        $freeIds = $toppings->sortByDesc('price')->take($menu->free_toppings)->pluck('id')->all();
+        $toppingPrice = fn (Topping $t) => in_array($t->id, $freeIds) ? 0 : $t->price;
+        $each = $base + (int) $toppings->sum($toppingPrice);
+        $lineTotal = $each * $qty;
+
+        return ['menu' => $menu, 'variant' => $variant, 'toppings' => $toppings, 'qty' => $qty, 'each' => $each,
+            'lineTotal' => $lineTotal, 'overridden' => $overridden, 'base' => $base, 'freeIds' => $freeIds,
+            'promo_name' => null, 'listPrice' => null];
+    }
+
+    /** Baris item gratis dari promo: harga Rp0, tanpa topping, dan tidak boleh melebihi yang sudah didapat. */
+    private function buildFreeLine(string $outletId, array $row, array $earned, array &$used): array
+    {
+        $promo = Promo::freeItemPromos($outletId)->firstWhere('id', $row['promo_id']);
+        $menu = Menu::where('outlet_id', $outletId)->where('is_active', true)->find($row['menu_id']);
+        if (! $promo || ! $menu || ! $promo->matchesReward($menu)) {
+            throw ValidationException::withMessages(['cart' => 'Promo gratisan sudah tidak berlaku. Hapus item gratis dari pesanan.']);
+        }
+        $variant = ! empty($row['variant_id']) ? MenuVariant::where('menu_id', $menu->id)->find($row['variant_id']) : null;
+        if ($menu->variants()->exists() && ! $variant) {
+            throw ValidationException::withMessages(['cart' => "Pilih ukuran untuk {$menu->name}."]);
+        }
+        $qty = (int) $row['qty'];
+        $used[$promo->id] = ($used[$promo->id] ?? 0) + $qty;
+        if ($qty < 1 || $used[$promo->id] > ($earned[$promo->id] ?? 0)) {
+            throw ValidationException::withMessages(['cart' => "Promo \"{$promo->name}\" hanya memberi ".($earned[$promo->id] ?? 0).' gratisan.']);
+        }
+
+        return ['menu' => $menu, 'variant' => $variant, 'toppings' => collect(), 'qty' => $qty, 'each' => 0, 'lineTotal' => 0,
+            'overridden' => false, 'base' => 0, 'freeIds' => [], 'promo_name' => $promo->name,
+            'listPrice' => $variant?->price ?? $menu->base_price];
+    }
+
+    /**
+     * Berapa gratisan yang didapat tiap promo dari item biasa di pesanan.
+     *
+     * @param  iterable<Promo>  $promos
+     * @param  array<int, array{menu: Menu, qty: int}>  $items
+     * @return array<string, int> promo_id => jumlah gratisan
+     */
+    private function earned(iterable $promos, array $items): array
+    {
+        $out = [];
+        foreach ($promos as $p) {
+            $count = 0;
+            foreach ($items as $it) {
+                if ($p->matchesTrigger($it['menu'])) {
+                    $count += $it['qty'];
+                }
+            }
+            $out[$p->id] = intdiv($count, max(1, $p->buy_qty)) * max(1, $p->reward_qty);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Status promo "beli X gratis Y" untuk pesanan saat ini (dipakai layar kasir).
+     *
+     * @return array<int, array{promo: Promo, count: int, need: int, earned: int, used: int, remaining: int, menus: \Illuminate\Support\Collection}>
+     */
+    public function offers(string $outletId, array $cart): array
+    {
+        $promos = Promo::freeItemPromos($outletId);
+        if ($promos->isEmpty()) {
+            return [];
+        }
+        $menus = Menu::with('variants')->where('outlet_id', $outletId)->where('is_active', true)->get();
+        $byId = $menus->keyBy('id');
+        $items = [];
+        $used = [];
+        foreach ($cart as $row) {
+            if (! empty($row['promo_id'])) {
+                $used[$row['promo_id']] = ($used[$row['promo_id']] ?? 0) + (int) $row['qty'];
+            } elseif ($m = $byId[$row['menu_id']] ?? null) {
+                $items[] = ['menu' => $m, 'qty' => (int) $row['qty']];
+            }
+        }
+        $earned = $this->earned($promos, $items);
+
+        $offers = [];
+        foreach ($promos as $p) {
+            $count = collect($items)->filter(fn ($it) => $p->matchesTrigger($it['menu']))->sum('qty');
+            $remaining = ($earned[$p->id] ?? 0) - ($used[$p->id] ?? 0);
+            $offers[] = [
+                'promo' => $p, 'count' => $count, 'earned' => $earned[$p->id] ?? 0, 'used' => $used[$p->id] ?? 0,
+                'remaining' => max(0, $remaining),
+                'need' => $count > 0 ? max(1, $p->buy_qty) - ($count % max(1, $p->buy_qty)) : 0,
+                'menus' => $remaining > 0 ? $menus->filter(fn ($m) => $p->matchesReward($m))->values() : collect(),
+            ];
+        }
+
+        return $offers;
+    }
+
+    /**
+     * Buang/kurangi item gratis yang sudah tidak berhak (item pemicu dikurangi, promo dimatikan, dsb).
+     *
+     * @return array{0: array, 1: array<int, string>} [keranjang baru, nama item yang dikeluarkan]
+     */
+    public function pruneFreeLines(string $outletId, array $cart): array
+    {
+        $promos = Promo::freeItemPromos($outletId)->keyBy('id');
+        $menus = Menu::where('outlet_id', $outletId)->whereIn('id', array_column($cart, 'menu_id'))->get()->keyBy('id');
+        $items = [];
+        foreach ($cart as $row) {
+            if (empty($row['promo_id']) && isset($menus[$row['menu_id']])) {
+                $items[] = ['menu' => $menus[$row['menu_id']], 'qty' => (int) $row['qty']];
+            }
+        }
+        $earned = $this->earned($promos, $items);
+
+        $removed = [];
+        $used = [];
+        foreach ($cart as $key => $row) {
+            if (empty($row['promo_id'])) {
+                continue;
+            }
+            $p = $promos[$row['promo_id']] ?? null;
+            $m = $menus[$row['menu_id']] ?? null;
+            $room = $p ? ($earned[$p->id] ?? 0) - ($used[$p->id] ?? 0) : 0;
+            if (! $p || ! $m || ! $p->matchesReward($m) || $room <= 0) {
+                $removed[] = $row['name'];
+                unset($cart[$key]);
+
+                continue;
+            }
+            if ($row['qty'] > $room) {
+                $cart[$key]['qty'] = $room;
+                $removed[] = ($row['qty'] - $room).'× '.$row['name'];
+            }
+            $used[$p->id] = ($used[$p->id] ?? 0) + $cart[$key]['qty'];
+        }
+
+        return [$cart, $removed];
     }
 
     public function checkout(User $cashier, Shift $shift, array $cart, string $method, string $channel, int $paid, int $manualDiscount = 0, ?User $approver = null): Transaction
@@ -138,6 +289,7 @@ class PosService
                     'qty' => $l['qty'],
                     'price_each' => $l['each'],
                     'subtotal' => $l['lineTotal'],
+                    'promo_name' => $l['promo_name'],
                 ]);
                 foreach ($l['toppings'] as $t) {
                     $free = in_array($t->id, $l['freeIds']);

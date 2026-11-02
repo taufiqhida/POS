@@ -42,7 +42,7 @@ class IngredientResource extends Resource
         return $form->schema([
             Forms\Components\Select::make('outlet_id')->label('Outlet')->relationship('outlet', 'name')->required(),
             Forms\Components\TextInput::make('name')->label('Nama bahan')->required(),
-            Forms\Components\Select::make('unit')->label('Satuan')->options(['pcs' => 'pcs', 'gram' => 'gram', 'ml' => 'ml', 'kg' => 'kg', 'liter' => 'liter', 'pack' => 'pack'])->required(),
+            Forms\Components\Select::make('unit')->label('Satuan')->options(WarehouseItemResource::UNITS)->required(),
             Forms\Components\TextInput::make('stock_current')->label('Stok saat ini')->numeric()->default(0)
                 ->disabledOn('edit')->helperText('Ubah stok lewat aksi Restock / Koreksi agar tercatat di riwayat.'),
             Forms\Components\TextInput::make('stock_min')->label('Batas stok kritis')->numeric()->default(0),
