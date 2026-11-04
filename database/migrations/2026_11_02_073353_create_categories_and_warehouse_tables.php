@@ -10,6 +10,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Migrasi ini bisa diulang: sisa tabel dari percobaan yang gagal di tengah jalan (MySQL tidak membatalkan
+        // pembuatan tabel) dibuang dulu. Tabel-tabel ini baru dibuat di sini, jadi belum ada data asli di dalamnya.
+        Schema::dropIfExists('warehouse_movements');
+        Schema::dropIfExists('warehouse_items');
+        Schema::dropIfExists('categories');
+
         // ---- Kategori menu yang bisa diatur owner ----
         Schema::create('categories', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -20,8 +26,9 @@ return new class extends Migration
 
         // Kategori yang sudah dipakai menu otomatis menjadi data kategori (urutan sesuai kemunculan).
         $order = 0;
-        foreach (DB::table('menus')->orderBy('created_at')->pluck('category')->unique() as $name) {
-            DB::table('categories')->insert(['id' => (string) Str::uuid(), 'name' => $name, 'sort_order' => $order += 10,
+        // Kolom name unik dan MySQL tidak membedakan huruf besar/kecil, jadi nama kembar dilewati (insertOrIgnore).
+        foreach (DB::table('menus')->orderBy('created_at')->pluck('category')->filter()->unique() as $name) {
+            DB::table('categories')->insertOrIgnore(['id' => (string) Str::uuid(), 'name' => trim($name), 'sort_order' => $order += 10,
                 'created_at' => now(), 'updated_at' => now()]);
         }
 
@@ -49,7 +56,7 @@ return new class extends Migration
 
         // Bahan yang sudah ada di outlet otomatis punya "kartu" di gudang (stok awal 0, isi lewat Barang masuk).
         foreach (DB::table('ingredients')->orderBy('created_at')->get(['name', 'unit'])->unique('name') as $i) {
-            DB::table('warehouse_items')->insert(['id' => (string) Str::uuid(), 'name' => $i->name, 'unit' => $i->unit,
+            DB::table('warehouse_items')->insertOrIgnore(['id' => (string) Str::uuid(), 'name' => trim($i->name), 'unit' => $i->unit,
                 'created_at' => now(), 'updated_at' => now()]);
         }
     }
