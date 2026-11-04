@@ -57,6 +57,12 @@ class PosAuthController extends Controller
 
     public function logout(Request $request)
     {
+        // Kasir tidak boleh keluar selama shift outletnya masih terbuka — tutup shift dulu supaya kas tercatat.
+        $user = Auth::user();
+        if ($user?->role === 'kasir' && Outlet::find(session('pos_outlet_id'))?->openShift()) {
+            return redirect()->route('pos')->with('logout_error', 'Tutup shift dulu sebelum keluar.');
+        }
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

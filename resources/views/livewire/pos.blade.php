@@ -48,7 +48,11 @@
 
             <form method="POST" action="{{ route('pos.logout') }}" class="{{ $this->shift ? 'md:ml-2 ml-auto' : 'ml-auto' }}">
                 @csrf
-                <button class="btn btn-ghost btn-sm">Keluar</button>
+                @if (auth()->user()->role === 'kasir' && $this->shift)
+                    <button type="button" disabled title="Tutup shift dulu sebelum keluar" class="btn btn-ghost btn-sm cursor-not-allowed opacity-50">Keluar</button>
+                @else
+                    <button class="btn btn-ghost btn-sm">Keluar</button>
+                @endif
             </form>
         </div>
 

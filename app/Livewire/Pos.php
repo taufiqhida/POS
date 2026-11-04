@@ -96,6 +96,9 @@ class Pos extends Component
     public function mount(): void
     {
         $this->outletId = session('pos_outlet_id');
+        if ($msg = session('logout_error')) {
+            $this->toast($msg, 'error');
+        }
         // Mulai dari tab ⭐ Best supaya menu yang paling sering dipesan langsung terlihat.
         $this->category = $this->best[0] ? self::BEST : '';
     }
