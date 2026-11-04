@@ -12,6 +12,18 @@ class Menu extends Model
 {
     use HasUuids, SoftDeletes;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['name' => 'Nama', 'category' => 'Kategori', 'base_price' => 'Harga', 'is_active' => 'Tersedia',
+        'free_toppings' => 'Topping gratis', 'stamps' => 'Cap', 'is_reward' => 'Hadiah', 'is_best' => 'Best'];
+
+    public const MONEY = ['base_price'];
+
+    public function auditLabel(): string
+    {
+        return 'Menu "'.$this->name.'" ('.($this->outlet?->name ?? '—').')';
+    }
+
     protected $fillable = ['outlet_id', 'name', 'category', 'image', 'base_price', 'free_toppings', 'stamps', 'topping_group', 'is_active', 'is_best', 'is_reward'];
 
     protected $casts = ['is_active' => 'boolean', 'is_best' => 'boolean', 'is_reward' => 'boolean', 'stamps' => 'integer', 'base_price' => 'integer', 'free_toppings' => 'integer'];

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Ingredient;
 use App\Models\Outlet;
 use App\Models\StockMovement;
@@ -105,5 +106,8 @@ class WarehouseService
     {
         WarehouseMovement::create(['warehouse_item_id' => $item->id, 'outlet_id' => $outlet?->id, 'qty_change' => $change,
             'reason' => $reason, 'user_id' => $user->id, 'note' => $note]);
+        AuditLog::record('stock_update', $user->id, 'warehouse_item', $item->id, sprintf('Gudang "%s": %s%s %s (%s)%s',
+            $item->name, $change > 0 ? '+' : '', rtrim(rtrim(number_format($change, 2, ',', '.'), '0'), ','), $item->unit,
+            WarehouseMovement::REASONS[$reason] ?? $reason, $outlet ? " → {$outlet->name}" : ''));
     }
 }

@@ -10,6 +10,17 @@ class Topping extends Model
 {
     use HasUuids;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['name' => 'Nama', 'group' => 'Grup', 'price' => 'Harga', 'is_active' => 'Tersedia'];
+
+    public const MONEY = ['price'];
+
+    public function auditLabel(): string
+    {
+        return 'Topping "'.$this->name.'"';
+    }
+
     public const GROUPS = ['minuman' => 'Minuman', 'waffle' => 'Waffle', 'croffle' => 'Croffle (tanpa tambahan)', 'makanan' => 'Kebab / Burger / Maryam'];
 
     protected $fillable = ['name', 'group', 'price', 'is_active'];

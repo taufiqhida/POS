@@ -12,6 +12,17 @@ class Promo extends Model
 {
     use HasUuids;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['name' => 'Nama', 'type' => 'Jenis', 'value' => 'Nilai', 'min_subtotal' => 'Min. belanja', 'is_active' => 'Aktif'];
+
+    public const MONEY = ['min_subtotal'];
+
+    public function auditLabel(): string
+    {
+        return 'Promo "'.$this->name.'"';
+    }
+
     public const TYPES = ['percent' => 'Persen (%)', 'fixed' => 'Potongan (Rp)', 'free_item' => 'Beli item, gratis item'];
 
     protected $fillable = ['outlet_id', 'name', 'type', 'value', 'min_subtotal', 'starts_at', 'ends_at', 'is_active',

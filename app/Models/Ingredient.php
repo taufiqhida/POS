@@ -12,6 +12,17 @@ class Ingredient extends Model
 {
     use HasUuids;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['name' => 'Nama', 'unit' => 'Satuan', 'stock_current' => 'Stok', 'stock_min' => 'Batas kritis'];
+
+    public const MONEY = [];
+
+    public function auditLabel(): string
+    {
+        return 'Bahan "'.$this->name.'" ('.($this->outlet?->name ?? '—').')';
+    }
+
     protected $fillable = ['outlet_id', 'name', 'unit', 'stock_current', 'stock_min'];
 
     protected $casts = ['stock_current' => 'float', 'stock_min' => 'float'];

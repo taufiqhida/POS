@@ -10,6 +10,17 @@ class MenuVariant extends Model
 {
     use HasUuids;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['size' => 'Ukuran', 'price' => 'Harga'];
+
+    public const MONEY = ['price'];
+
+    public function auditLabel(): string
+    {
+        return 'Ukuran "'.$this->size.'" menu "'.($this->menu?->name ?? '—').'"';
+    }
+
     protected $fillable = ['menu_id', 'size', 'price'];
 
     protected $casts = ['price' => 'integer'];

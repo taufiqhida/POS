@@ -219,7 +219,8 @@ class JellyPointTest extends TestCase
         $this->assertTrue(collect($lw->get('cart'))->contains(fn ($l) => ! empty($l['reward'])));
         $lw->set('paid', 100000)->call('checkout')->assertHasNoErrors();
 
-        $trx = Transaction::latest()->first();
+        $this->assertSame(2, Transaction::count());
+        $trx = Transaction::where('customer_id', $c->id)->orderByDesc('stamps_used')->first();
         $this->assertSame(10, $trx->stamps_used);
         $this->assertSame($waffle->base_price, $trx->total);
         $this->assertSame($waffle->stamps, $c->fresh()->stamps);   // 10 - 10 + cap waffle

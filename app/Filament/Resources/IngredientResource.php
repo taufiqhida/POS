@@ -62,6 +62,9 @@ class IngredientResource extends Resource
                 $record->increment('stock_current', $change);
                 StockMovement::create(['outlet_id' => $record->outlet_id, 'ingredient_id' => $record->id, 'qty_change' => $change,
                     'reason' => $reason, 'user_id' => auth()->id(), 'note' => $data['note'] ?? null]);
+                \App\Models\AuditLog::record('stock_update', auth()->id(), 'ingredient', $record->id, sprintf('Bahan "%s" (%s): %s%s %s (%s)',
+                    $record->name, $record->outlet->name, $change > 0 ? '+' : '', round($change, 2), $record->unit,
+                    \App\Models\StockMovement::REASONS[$reason] ?? $reason));
             });
             Notification::make()->title('Stok diperbarui')->success()->send();
         };

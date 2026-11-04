@@ -11,6 +11,17 @@ class WarehouseItem extends Model
 {
     use HasUuids;
 
+    use Concerns\LogsChanges;
+
+    public const AUDITED = ['name' => 'Nama', 'unit' => 'Satuan', 'stock_min' => 'Batas kritis'];
+
+    public const MONEY = [];
+
+    public function auditLabel(): string
+    {
+        return 'Bahan gudang "'.$this->name.'"';
+    }
+
     protected $fillable = ['name', 'unit', 'stock_current', 'stock_min'];
 
     protected $casts = ['stock_current' => 'float', 'stock_min' => 'float'];
