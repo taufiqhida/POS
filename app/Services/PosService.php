@@ -402,6 +402,38 @@ class PosService
             'user_id' => $userId, 'note' => $trx->number]);
     }
 
+    /**
+     * Membetulkan metode bayar yang salah pencet (mis. Tunai ↔ QRIS). Hanya selama shift transaksi itu masih buka,
+     * supaya hitungan kas laci saat tutup shift ikut benar. Selalu tercatat di Riwayat Aktivitas untuk owner.
+     */
+    public function changePaymentMethod(Transaction $trx, User $user, string $method, string $reason): Transaction
+    {
+        $reason = trim($reason);
+        if (mb_strlen($reason) < 3) {
+            throw ValidationException::withMessages(['methodReason' => 'Tulis alasan ganti metode bayar.']);
+        }
+        if (! array_key_exists($method, Transaction::METHODS)) {
+            throw ValidationException::withMessages(['method' => 'Metode bayar tidak valid.']);
+        }
+        if ($trx->status !== 'paid' || $trx->isPendingCancel()) {
+            throw ValidationException::withMessages(['method' => 'Transaksi ini sudah dibatalkan / sedang diajukan batal.']);
+        }
+        if ($trx->shift?->status !== 'open') {
+            throw ValidationException::withMessages(['method' => 'Shift transaksi ini sudah ditutup. Minta owner/manager membetulkan.']);
+        }
+        $old = $trx->payment_method;
+        if ($old === $method) {
+            throw ValidationException::withMessages(['method' => 'Metode bayarnya sama dengan sebelumnya.']);
+        }
+
+        // Uang diterima disamakan dengan total (kembalian 0) — sama seperti pembayaran non-tunai saat checkout.
+        $trx->update(['payment_method' => $method, 'paid_amount' => $trx->total, 'change_amount' => 0]);
+        AuditLog::record('payment_change', $user->id, 'transaction', $trx->id, sprintf('%s (%s): %s → %s. Alasan: %s',
+            $trx->number, 'Rp'.number_format($trx->total, 0, ',', '.'), Transaction::METHODS[$old], Transaction::METHODS[$method], $reason));
+
+        return $trx;
+    }
+
     /** Kasir mengajukan void/refund. Transaksi tetap dihitung sampai disetujui owner/manager. */
     public function requestCancel(Transaction $trx, User $cashier, string $type, string $reason): Transaction
     {

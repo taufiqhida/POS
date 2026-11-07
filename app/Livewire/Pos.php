@@ -633,6 +633,40 @@ class Pos extends Component
         $this->toast("Pengajuan {$this->cancelType} {$trx->number} terkirim. Menunggu verifikasi owner/manager.");
     }
 
+    // ---------- Ganti metode bayar (salah pencet) — wajib alasan, dicek owner ----------
+
+    public ?string $methodTrxId = null;
+
+    public string $newMethod = '';
+
+    public string $methodReason = '';
+
+    public function askMethod(string $id): void
+    {
+        $trx = Transaction::where('outlet_id', $this->outletId)->findOrFail($id);
+        $this->methodTrxId = $trx->id;
+        $this->newMethod = $trx->payment_method === 'cash' ? 'qris' : 'cash';
+        $this->methodReason = '';
+        $this->resetErrorBag();
+    }
+
+    public function submitMethodChange(PosService $pos): void
+    {
+        $trx = Transaction::where('outlet_id', $this->outletId)->findOrFail($this->methodTrxId);
+        $old = $trx->payment_method;
+        $this->resetErrorBag();
+        try {
+            $pos->changePaymentMethod($trx, Auth::user(), $this->newMethod, $this->methodReason);
+        } catch (ValidationException $e) {
+            $this->setErrorBag($e->validator->errors());
+
+            return;
+        }
+        $this->methodTrxId = null;
+        unset($this->history, $this->shift);
+        $this->toast("{$trx->number}: ".Transaction::METHODS[$old].' → '.Transaction::METHODS[$this->newMethod].'. Tercatat untuk dicek owner.');
+    }
+
     private function findApprover(string $pin): ?User
     {
         if ($pin === '') {

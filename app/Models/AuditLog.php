@@ -10,7 +10,19 @@ class AuditLog extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['user_id', 'approved_by', 'action', 'reference_type', 'reference_id', 'detail'];
+    protected $fillable = ['user_id', 'approved_by', 'action', 'reference_type', 'reference_id', 'detail', 'reviewed_at', 'reviewed_by'];
+
+    protected $casts = ['reviewed_at' => 'datetime'];
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function transaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'reference_id');
+    }
 
     public function user(): BelongsTo
     {

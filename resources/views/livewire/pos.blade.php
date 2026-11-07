@@ -369,6 +369,9 @@
                             @if ($t->status === 'paid')
                                 <div class="flex gap-1.5">
                                     <a href="{{ route('receipt', $t) }}" target="_blank" class="btn btn-secondary btn-sm">Struk</a>
+                                    @if (! $t->isPendingCancel() && $t->shift_id === $this->shift?->id)
+                                        <button wire:click="askMethod('{{ $t->id }}')" class="btn btn-secondary btn-sm" title="Salah pencet metode bayar?">Ganti bayar</button>
+                                    @endif
                                     @unless ($t->isPendingCancel())
                                         <button wire:click="askCancel('{{ $t->id }}', 'void')" class="btn btn-secondary btn-sm">Void</button>
                                         <button wire:click="askCancel('{{ $t->id }}', 'refund')" class="btn btn-secondary btn-sm">Refund</button>
@@ -866,6 +869,46 @@
                 <div class="flex gap-2 border-t border-slate-200 px-5 py-4">
                     <button type="button" wire:click="$set('cancelId', null)" class="btn btn-secondary">Batal</button>
                     <button class="btn btn-danger flex-1">Kirim pengajuan</button>
+                </div>
+            </form>
+        </div>
+    @endif
+
+    {{-- ================= MODAL: ganti metode bayar ================= --}}
+    @if ($methodTrxId)
+        @php($mt = $this->history->firstWhere('id', $methodTrxId))
+        <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="method-title">
+            <form wire:submit="submitMethodChange" class="modal sm:max-w-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h3 id="method-title" class="text-base font-semibold">Ganti metode bayar {{ $mt?->number }}</h3>
+                    <p class="mt-1 text-xs text-slate-500">Perubahan ini dilaporkan ke owner dan harus dicek.</p>
+                </div>
+                <div class="space-y-3 px-5 py-4">
+                    @if ($mt)
+                        <div class="flex justify-between rounded-lg bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-inset ring-slate-200">
+                            <span>Sekarang: <b>{{ \App\Models\Transaction::METHODS[$mt->payment_method] }}</b></span>
+                            <span class="ml-3 font-semibold tabular-nums">{{ $rp($mt->total) }}</span>
+                        </div>
+                    @endif
+                    <div>
+                        <label class="label" for="newMethod">Ganti jadi</label>
+                        <select id="newMethod" wire:model="newMethod" class="input h-11">
+                            @foreach (\App\Models\Transaction::METHODS as $k => $label)
+                                @continue($mt && $mt->payment_method === $k)
+                                <option value="{{ $k }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        @error('method') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="label" for="methodReason">Alasan</label>
+                        <input id="methodReason" wire:model="methodReason" placeholder="mis. pelanggan bayar QRIS, tadi salah pencet Tunai" class="input h-11" autofocus>
+                        @error('methodReason') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+                <div class="flex gap-2 border-t border-slate-200 px-5 py-4">
+                    <button type="button" wire:click="$set('methodTrxId', null)" class="btn btn-secondary">Batal</button>
+                    <button class="btn btn-primary flex-1">Simpan perubahan</button>
                 </div>
             </form>
         </div>
