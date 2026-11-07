@@ -226,6 +226,24 @@ class JellyPointTest extends TestCase
         $this->assertSame($waffle->stamps, $c->fresh()->stamps);   // 10 - 10 + cap waffle
     }
 
+    public function test_empty_member_number_asks_for_confirmation_first(): void
+    {
+        $lw = Livewire::test(Pos::class)->set('category', '')
+            ->call('pick', $this->menu('Waffle Pandan')->id)->call('addToCart')->call('openPay')
+            ->set('paid', 100000)->call('checkout')
+            ->assertSet('askNoMember', true)->assertSee('Yakin nomor member kosong?');
+        $this->assertSame(0, Transaction::count());                 // belum tersimpan
+
+        $lw->call('confirmNoMember')->assertSee('Pembayaran berhasil');
+        $this->assertSame(1, Transaction::count());
+        $this->assertNull(Transaction::first()->customer_id);
+
+        // Pesanan berikutnya ditanya lagi; pesanan online tidak ditanya.
+        $lw->call('newOrder')->call('pick', $this->menu('Waffle Pandan')->id)->call('addToCart')->call('openPay')
+            ->set('channel', 'gofood')->call('checkout')->assertSet('askNoMember', false);
+        $this->assertSame(2, Transaction::count());
+    }
+
     public function test_changing_member_removes_the_reward_line(): void
     {
         $this->menu('Jasmine Tea')->update(['is_reward' => true]);

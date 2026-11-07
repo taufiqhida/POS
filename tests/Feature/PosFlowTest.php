@@ -354,7 +354,7 @@ class PosFlowTest extends TestCase
             ->call('pick', $menu->id)->assertSee('1 topping gratis')->call('addToCart')
             ->call('pick', $menu->id)->call('addToCart')
             ->assertSet('cart', fn ($c) => count($c) === 1 && array_values($c)[0]['qty'] === 2)
-            ->call('openPay')->set('paid', 50000)->call('checkout')
+            ->call('openPay')->set('paid', 50000)->set('noMemberOk', true)->call('checkout')
             ->assertHasNoErrors()->assertSee('Pembayaran berhasil');
 
         $this->assertSame(26000, Transaction::first()->total);

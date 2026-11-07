@@ -72,7 +72,7 @@ class BugHuntTest extends TestCase
         $this->pos()->set('tab', 'shift')->set('expenseDesc', 'Es')->set('expenseAmount', 99999999999)->call('addExpense')->assertHasErrors('expenseAmount');
         $this->pos()->set('tab', 'shift')->set('actualCash', 99999999999)->call('confirmCloseShift')->assertHasErrors('actualCash');
         $lw = $this->pos()->call('pick', $this->menu('Jasmine Tea')->id)->call('addToCart')
-            ->call('openPay')->set('paid', 99999999999)->call('checkout');
+            ->call('openPay')->set('paid', 99999999999)->set('noMemberOk', true)->call('checkout');
         $lw->assertHasErrors('paid');
     }
 
@@ -148,7 +148,7 @@ class BugHuntTest extends TestCase
         $menu = $this->menu('Menu Baru');
 
         $this->actingAs($this->kasir);
-        $this->pos()->call('pick', $menu->id)->call('addToCart')->call('openPay')->set('paid', 7000)->call('checkout')
+        $this->pos()->call('pick', $menu->id)->call('addToCart')->call('openPay')->set('paid', 7000)->set('noMemberOk', true)->call('checkout')
             ->assertHasNoErrors()->assertSee('Pembayaran berhasil');
     }
 }

@@ -167,7 +167,7 @@ class FreeItemPromoTest extends TestCase
             ->call('pick', $this->menu('Waffle Pandan')->id)->call('addToCart')
             ->call('pick', $this->menu('Waffle Pandan')->id)->call('addToCart')
             ->call('openFree', $this->promo->id)->call('claimFree', $this->menu('Mango Tea')->id)
-            ->call('openPay')->set('paid', 34000)->call('checkout')
+            ->call('openPay')->set('paid', 34000)->set('noMemberOk', true)->call('checkout')
             ->assertHasNoErrors()->assertSee('Pembayaran berhasil');
 
         $this->assertSame(34000, Transaction::first()->total);

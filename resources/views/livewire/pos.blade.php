@@ -687,6 +687,16 @@
                     @elseif ($method === 'qris')
                         <p class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">Minta pembeli memindai QRIS outlet, lalu konfirmasi setelah dana masuk.</p>
                     @endif
+                    @if ($askNoMember)
+                        <div class="rounded-lg bg-amber-50 px-4 py-3 ring-1 ring-inset ring-amber-200" role="alert">
+                            <p class="text-sm font-semibold text-amber-900">Yakin nomor member kosong?</p>
+                            <p class="mt-0.5 text-xs text-amber-800">Tanyakan dulu ke pelanggan. Tanpa nomor, pelanggan tidak mendapat cap Jelly Point.</p>
+                            <div class="mt-3 flex gap-2">
+                                <button type="button" wire:click="$set('askNoMember', false)" onclick="setTimeout(() => document.getElementById('memberPhone')?.focus(), 50)" class="btn btn-secondary flex-1">Isi nomor</button>
+                                <button type="button" wire:click="confirmNoMember" class="btn btn-primary flex-1">Ya, lanjut tanpa nomor</button>
+                            </div>
+                        </div>
+                    @endif
                     @foreach (['paid', 'pin', 'cart', 'payment'] as $f)
                         @error($f) <p class="text-sm font-medium text-rose-600" role="alert">{{ $message }}</p> @enderror
                     @endforeach

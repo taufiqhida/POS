@@ -547,7 +547,8 @@ class Pos extends Component
     public function clearCart(): void
     {
         $this->reset('cart', 'manualDiscount', 'approverId', 'paid', 'showPay', 'cartOpen', 'freePromoId',
-            'customerId', 'memberPhone', 'memberName', 'memberPin', 'memberRegister', 'rewardOpen', 'rewardPin');
+            'customerId', 'memberPhone', 'memberName', 'memberPin', 'memberRegister', 'rewardOpen', 'rewardPin',
+            'noMemberOk', 'askNoMember');
         $this->memberConsent = true;
         unset($this->customer);
         $this->channel = 'offline';
@@ -654,8 +655,26 @@ class Pos extends Component
         $this->paid = null;
     }
 
+    /** Kasir sudah memastikan pelanggan memang tidak mau/punya nomor member. */
+    public bool $noMemberOk = false;
+
+    public bool $askNoMember = false;
+
+    public function confirmNoMember(PosService $pos): void
+    {
+        $this->noMemberOk = true;
+        $this->askNoMember = false;
+        $this->checkout($pos);
+    }
+
     public function checkout(PosService $pos): void
     {
+        // Nomor member boleh kosong, tapi kasir diingatkan dulu supaya tidak lupa bertanya (pesanan online tidak dapat cap).
+        if (! $this->customerId && $this->channel === 'offline' && ! $this->noMemberOk) {
+            $this->askNoMember = true;
+
+            return;
+        }
         $approver = $this->approverId ? User::find($this->approverId) : null;
         try {
             $trx = $pos->checkout(Auth::user(), $this->requireShift(), array_values($this->cart), $this->method, $this->channel,
